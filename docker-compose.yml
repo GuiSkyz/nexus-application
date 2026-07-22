@@ -1,0 +1,198 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # PostgreSQL - Fonte Oficial da Verdade
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexusops_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nexusops_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexusops_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-nexusops_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexusops_user} -d ${POSTGRES_DB:-nexusops_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - nexusops_network
+
+  # ==========================================
+  # Redis - Cache, Filas e Revogação de Tokens
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: nexusops_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-nexusops_redis_secure_pass}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-nexusops_redis_secure_pass} ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - nexusops_network
+
+  # ==========================================
+  # MinIO - Armazenamento de Arquivos/PDFs/Fotos
+  # ==========================================
+  minio:
+    image: minio/minio:latest
+    container_name: nexusops_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nexusops_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-nexusops_minio_secure_pass}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - nexusops_network
+
+  # ==========================================
+  # MinIO Init Bucket - Provisionamento Automático
+  # ==========================================
+  minio-init:
+    image: minio/mc:latest
+    container_name: nexusops_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nexusops_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-nexusops_minio_secure_pass}
+      MINIO_DEFAULT_BUCKET: ${MINIO_DEFAULT_BUCKET:-nexusops-storage}
+    volumes:
+      - ./infrastructure/docker/minio/init-bucket.sh:/init-bucket.sh:ro
+    entrypoint: ["/bin/sh", "/init-bucket.sh"]
+    networks:
+      - nexusops_network
+
+  # ==========================================
+  # API FastAPI - Backend Principal
+  # ==========================================
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: nexusops_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      APP_NAME: ${APP_NAME:-NexusOps}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_V1_STR: /api/v1
+      SECRET_KEY: ${SECRET_KEY:-nexusops_dev_secret_key_change_in_production}
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-nexusops_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexusops_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-nexusops_db}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nexusops_user}:${POSTGRES_PASSWORD:-nexusops_secure_pass}@postgres:5432/${POSTGRES_DB:-nexusops_db}
+      DATABASE_SYNC_URL: postgresql://${POSTGRES_USER:-nexusops_user}:${POSTGRES_PASSWORD:-nexusops_secure_pass}@postgres:5432/${POSTGRES_DB:-nexusops_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-nexusops_redis_secure_pass}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-nexusops_redis_secure_pass}@redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nexusops_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-nexusops_minio_secure_pass}
+      MINIO_DEFAULT_BUCKET: ${MINIO_DEFAULT_BUCKET:-nexusops-storage}
+      MINIO_USE_SSL: "false"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - nexusops_network
+
+  # ==========================================
+  # Web Frontend - Next.js
+  # ==========================================
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: nexusops_web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_APP_NAME: ${APP_NAME:-NexusOps}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => { process.exit(1); });\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - nexusops_network
+
+  # ==========================================
+  # Nginx - Reverse Proxy
+  # ==========================================
+  nginx:
+    image: nginx:alpine
+    container_name: nexusops_nginx
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - nexusops_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  nexusops_network:
+    driver: bridge

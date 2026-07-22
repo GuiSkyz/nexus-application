@@ -1,0 +1,85 @@
+# ==========================================
+# NexusOps Monorepo .gitignore
+# ==========================================
+
+# Environments & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+secrets.json
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.history/
+
+# Python / FastAPI (apps/api)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.log
+venv/
+env/
+ENV/
+.venv/
+
+# Node / Next.js / Expo (apps/web & apps/mobile)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+.next/
+out/
+build/
+dist/
+.cache/
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# Docker & Infrastructure
+infrastructure/data/
+postgres_data/
+redis_data/
+minio_data/
+
+# Temporary / Scratch
+tmp/
+temp/
+scratch/

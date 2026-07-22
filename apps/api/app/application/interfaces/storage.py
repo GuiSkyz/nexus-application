@@ -1,0 +1,22 @@
+from abc import ABC, abstractmethod
+from typing import BinaryIO, Optional
+
+
+class IStorageService(ABC):
+    """Interface abstrata para armazenamento de objetos pesados (fotos, assinaturas e relatórios PDF)."""
+
+    @abstractmethod
+    async def upload_file(self, file_stream: BinaryIO, object_name: str, content_type: str) -> str:
+        pass
+
+    @abstractmethod
+    async def download_file(self, object_name: str) -> BinaryIO:
+        pass
+
+    @abstractmethod
+    async def generate_presigned_url(self, object_name: str, expires_in_seconds: int = 3600) -> str:
+        pass
+
+    @abstractmethod
+    async def delete_file(self, object_name: str) -> bool:
+        pass

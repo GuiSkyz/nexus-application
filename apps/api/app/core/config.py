@@ -13,11 +13,13 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     APP_NAME: str = "NexusOps"
     APP_VERSION: str = "0.1.0"
+    DEBUG: bool = True
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = "change_this_to_a_very_long_random_secure_secret_key_in_production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    CORS_ORIGINS: str = "http://localhost:3000"
 
     # PostgreSQL
     POSTGRES_SERVER: str = "postgres"
@@ -66,6 +68,13 @@ class Settings(BaseSettings):
         if self.REDIS_URL:
             return self.REDIS_URL
         return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    def get_cors_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache()

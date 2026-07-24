@@ -1,29 +1,29 @@
-# ==========================================
-# NexusOps API - FastAPI Dockerfile
-# ==========================================
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS runtime
 
-# Prevent Python from writing bytecode and buffer stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/workspace
+    PYTHONPATH=/workspace \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /workspace
 
-# Install system dependencies required for building psycopg2 / cryptography / health checks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    curl \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy build files and install dependencies
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e .[dev]
+COPY pyproject.toml README.md ./
+COPY app ./app
+COPY migrations ./migrations
+COPY alembic.ini ./
 
-# Copy application source and migrations
-COPY . .
+RUN pip install --upgrade pip \
+    && pip install .
+
+RUN addgroup --system nexusops \
+    && adduser --system --ingroup nexusops --home /workspace nexusops \
+    && chown -R nexusops:nexusops /workspace
+
+USER nexusops
 
 EXPOSE 8000
 

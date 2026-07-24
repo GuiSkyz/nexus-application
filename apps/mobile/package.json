@@ -2,7 +2,7 @@
   "name": "nexusops-mobile",
   "version": "0.1.0",
   "private": true,
-  "main": "App.tsx",
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -11,17 +11,26 @@
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
   },
   "dependencies": {
-    "expo": "~50.0.14",
-    "expo-status-bar": "~1.11.1",
-    "react": "18.2.0",
-    "react-native": "0.73.6",
-    "@react-native-async-storage/async-storage": "1.21.0",
-    "uuid": "^9.0.1"
+    "@expo/metro-runtime": "~6.1.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~54.0.0",
+    "expo-status-bar": "~3.0.9",
+    "memoize-one": "^6.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-web": "^0.21.0",
+    "uuid": "^11.1.1"
+  },
+  "overrides": {
+    "postcss": "^8.5.12",
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
-    "@types/react": "~18.2.45",
-    "@types/uuid": "^9.0.8",
+    "@types/react": "~19.1.10",
+    "@types/uuid": "^10.0.0",
+    "source-map": "^0.5.6",
     "typescript": "^5.3.3"
   }
 }

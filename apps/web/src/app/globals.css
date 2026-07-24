@@ -4,63 +4,138 @@
 
 @layer base {
   :root {
-    --background: 220 33% 98%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 173 80% 36%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 173 80% 36%;
-    --radius: 0.75rem;
-  }
+    /* Marca */
+    --nexus-navy-950: #04162f;
+    --nexus-navy-900: #061f4a;
+    --nexus-navy-800: #062b78;
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 7.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 173 80% 40%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 173 80% 40%;
+    --nexus-blue-700: #03449d;
+    --nexus-blue-600: #0757c8;
+    --nexus-blue-500: #1671e8;
+    --nexus-blue-50: #f1f7ff;
+
+    --nexus-cyan-600: #0297bd;
+    --nexus-cyan-500: #00b8e6;
+    --nexus-cyan-50: #e8f9fd;
+
+    /* Superfícies */
+    --surface-page: #f5f7fa;
+    --surface-card: #ffffff;
+    --surface-muted: #eef2f6;
+    --surface-subtle: #f8fafc;
+
+    /* Texto */
+    --text-primary: #17202e;
+    --text-secondary: #667085;
+    --text-muted: #98a2b3;
+    --text-inverse: #ffffff;
+
+    /* Bordas */
+    --border-default: #d8e0e8;
+    --border-strong: #b9c7d8;
+    --border-focus: #0757c8;
+
+    /* Estados semânticos */
+    --success: #16a34a;
+    --success-foreground: #15803d;
+    --success-soft: #ecfdf3;
+
+    --warning: #f59e0b;
+    --warning-foreground: #b54708;
+    --warning-soft: #fffaeb;
+
+    --danger: #dc2626;
+    --danger-foreground: #b42318;
+    --danger-soft: #fef3f2;
+
+    --info: #00b8e6;
+    --info-foreground: #027a9f;
+    --info-soft: #e8f9fd;
+
+    /* Radius */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+
+    /* Sombras */
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+    --shadow-md: 0 2px 8px rgba(16, 24, 40, 0.05);
+    --shadow-overlay: 0 12px 32px rgba(16, 24, 40, 0.12);
+
+    /* Sidebar */
+    --sidebar-width: 256px;
+    --sidebar-width-collapsed: 72px;
+
+    /* Header */
+    --header-height: 64px;
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--border-default);
   }
+
   body {
-    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
+    background-color: var(--surface-page);
+    color: var(--text-primary);
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-.glass-panel {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+/* Skeleton loading */
+.skeleton {
+  background: #e8edf3;
+  border-radius: var(--radius-md);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Acessibilidade: respeitar preferência de movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Foco visível para navegação por teclado */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
 }

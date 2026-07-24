@@ -46,10 +46,11 @@ def create_app() -> FastAPI:
     )
 
     # Configuração de CORS por Ambiente (Segurança)
-    allowed_origins = ["*"] if settings.ENVIRONMENT == "development" else [
-        "https://nexusops.domain.com",
-        "http://localhost:3000"
-    ]
+    allowed_origins = (
+        ["*"]
+        if settings.ENVIRONMENT == "development"
+        else settings.get_cors_origins()
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,

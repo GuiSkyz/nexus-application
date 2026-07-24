@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Dict
 from fastapi import Request, Response
-from starlette.middleware.base import BaseMiddleware, RequestResponseEndpoint
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # ContextVar para propagar request_id nas rotas e logs assíncronos/síncronos
 request_id_ctx_var: ContextVar[str] = ContextVar("request_id", default="system")
@@ -70,7 +70,7 @@ def setup_logging(app_name: str, environment: str) -> None:
     logging.getLogger("alembic").setLevel(logging.INFO)
 
 
-class RequestIdMiddleware(BaseMiddleware):
+class RequestIdMiddleware(BaseHTTPMiddleware):
     """
     Middleware que gera um UUIDv4 de request_id para cada requisição HTTP,
     injetando no contexto de logs e no cabeçalho de resposta X-Request-ID.

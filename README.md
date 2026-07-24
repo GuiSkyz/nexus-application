@@ -117,6 +117,14 @@ pytest -v --cov=app
 
 ---
 
+## Staging
+
+A configuração de staging usa variáveis obrigatórias, serviços internos sem portas públicas e migrations automáticas antes da inicialização da API.
+
+Consulte `docs/deployment/staging.md` para preparar o arquivo `.env.staging`, validar o Compose e executar o ambiente.
+
+---
+
 ## Troubleshooting Inicial
 
 - **Erro de Conexão no `/health/ready` (`minio: unhealthy` ou `postgres: unhealthy`):**

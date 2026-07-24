@@ -1,7 +1,13 @@
-import { ReadinessResponse } from "../types";
+import { Platform } from "react-native";
+import { ReadinessResponse, SyncQueueItem } from "../types";
 
-// No Android emulador, localhost é 10.0.2.2 ou IP da LAN para dispositivos reais.
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:8000/api/v1";
+// No Android emulador, localhost é 10.0.2.2. No navegador web (Expo Web), é localhost.
+const defaultBaseUrl =
+  Platform.OS === "web"
+    ? "http://localhost:8000/api/v1"
+    : "http://10.0.2.2:8000/api/v1";
+
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || defaultBaseUrl;
 
 export class ApiService {
   static async getReadinessStatus(): Promise<ReadinessResponse> {
@@ -40,5 +46,25 @@ export class ApiService {
         errorDetail: error instanceof Error ? error.message : "Sem conectividade com o backend FastAPI.",
       };
     }
+  }
+
+  static async syncBatch(items: SyncQueueItem[]): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/inspections/sync`, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ items }),
+      });
+
+      if (response.ok) {
+        return true;
+      }
+    } catch (e) {
+      // Falha de rede ou backend offline
+    }
+    return false;
   }
 }

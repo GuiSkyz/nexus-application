@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from fastapi.concurrency import run_in_threadpool
 
+from app.application.interfaces.storage import ReportStorage
 from app.core.config import get_settings
 from app.infrastructure.minio.client import get_minio_client
 
@@ -33,5 +34,5 @@ class MinioReportStorage:
         )
 
 
-def get_report_storage() -> MinioReportStorage:
+def get_report_storage() -> ReportStorage:
     return MinioReportStorage()

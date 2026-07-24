@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.application.interfaces.storage import ReportStorage
 from app.application.services.inspection_report import (
     InspectionReportData,
     ReportAnswer,
@@ -14,7 +15,7 @@ from app.application.services.inspection_report import (
     SignaturePoint,
     generate_inspection_report,
 )
-from app.infrastructure.minio.report_storage import MinioReportStorage, get_report_storage
+from app.infrastructure.minio.report_storage import get_report_storage
 
 router = APIRouter(prefix="/inspections", tags=["Inspeções & Sincronização"])
 
@@ -146,7 +147,7 @@ async def sync_offline_inspections(batch: SyncBatchRequest) -> SyncBatchResponse
 async def generate_report(
     inspection_id: str,
     request: GenerateInspectionReportRequest,
-    storage_service: MinioReportStorage = Depends(get_report_storage),
+    storage_service: ReportStorage = Depends(get_report_storage),
 ) -> InspectionReportResponse:
     report_data = InspectionReportData(
         inspection_id=inspection_id,

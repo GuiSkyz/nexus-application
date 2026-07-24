@@ -1,3 +1,4 @@
+from app.infrastructure.database.models.system_metadata import SystemMetadata
 from app.infrastructure.database.models.user_model import UserModel
 from app.infrastructure.database.models.vehicle_model import VehicleModel
 from app.infrastructure.database.models.checklist_model import (
@@ -15,6 +16,7 @@ from app.infrastructure.database.models.apr_model import AprAssessmentModel, Apr
 from app.infrastructure.database.models.incident_model import IncidentModel, ActionPlanModel
 
 __all__ = [
+    "SystemMetadata",
     "UserModel",
     "VehicleModel",
     "ChecklistTemplateModel",

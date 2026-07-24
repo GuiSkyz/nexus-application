@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Protocol
 
 
 class IStorageService(ABC):
@@ -20,3 +20,11 @@ class IStorageService(ABC):
     @abstractmethod
     async def delete_file(self, object_name: str) -> bool:
         pass
+
+
+class ReportStorage(Protocol):
+    async def upload_pdf(self, content: bytes, object_key: str) -> str:
+        ...
+
+    async def generate_download_url(self, object_key: str) -> str:
+        ...

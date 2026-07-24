@@ -2,7 +2,6 @@ FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/workspace \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /workspace

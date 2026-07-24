@@ -1,4 +1,6 @@
 import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings, get_settings
 
 
@@ -39,3 +41,32 @@ def test_redis_url_generation() -> None:
     )
     redis_url = settings.get_redis_url()
     assert redis_url == "redis://:secret_pass@localhost:6379/1"
+
+
+def test_connection_urls_escape_credentials() -> None:
+    settings = Settings(
+        POSTGRES_USER="user@example.com",
+        POSTGRES_PASSWORD="p@ss:/word",
+        POSTGRES_SERVER="postgres",
+        POSTGRES_DB="nexus ops",
+        DATABASE_URL=None,
+        DATABASE_SYNC_URL=None,
+        REDIS_PASSWORD="redis@pass/word",
+        REDIS_URL=None,
+    )
+
+    assert settings.get_database_async_url() == (
+        "postgresql+asyncpg://user%40example.com:p%40ss%3A%2Fword@"
+        "postgres:5432/nexus%20ops"
+    )
+    assert settings.get_redis_url() == "redis://:redis%40pass%2Fword@redis:6379/0"
+
+
+def test_production_rejects_insecure_settings() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            SECRET_KEY="replace-with-at-least-64-random-characters",
+            CORS_ORIGINS="*",
+        )

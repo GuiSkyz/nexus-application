@@ -1,6 +1,5 @@
-import pytest
-from app.domain.entities.metadata import SystemMetadata
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.models import SystemMetadata
 
 
 def test_system_metadata_tablename_and_columns() -> None:
@@ -16,4 +15,13 @@ def test_system_metadata_tablename_and_columns() -> None:
 def test_base_metadata_registered_entities() -> None:
     """Verifica se os metadados do SQLAlchemy registraram corretamente as tabelas do domínio."""
     registered_tables = list(Base.metadata.tables.keys())
-    assert "sys_metadata" in registered_tables
+    assert {
+        "sys_metadata",
+        "users",
+        "vehicles",
+        "checklist_templates",
+        "inspections",
+        "inspection_reports",
+        "apr_assessments",
+        "incidents",
+    }.issubset(registered_tables)

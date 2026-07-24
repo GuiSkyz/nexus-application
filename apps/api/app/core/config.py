@@ -1,6 +1,8 @@
-import os
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import quote
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,20 +56,44 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        if self.ENVIRONMENT != "production":
+            return self
+        if self.DEBUG:
+            raise ValueError("DEBUG must be disabled in production")
+        if len(self.SECRET_KEY) < 64 or self.SECRET_KEY.startswith(
+            ("change_this", "replace-with")
+        ):
+            raise ValueError("SECRET_KEY must contain at least 64 secure characters")
+        if "*" in self.get_cors_origins():
+            raise ValueError("CORS_ORIGINS cannot contain a wildcard in production")
+        return self
+
     def get_database_async_url(self) -> str:
         if self.DATABASE_URL:
             return self.DATABASE_URL
-        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return self._build_database_url("postgresql+asyncpg")
 
     def get_database_sync_url(self) -> str:
         if self.DATABASE_SYNC_URL:
             return self.DATABASE_SYNC_URL
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return self._build_database_url("postgresql")
+
+    def _build_database_url(self, scheme: str) -> str:
+        username = quote(self.POSTGRES_USER, safe="")
+        password = quote(self.POSTGRES_PASSWORD, safe="")
+        database = quote(self.POSTGRES_DB, safe="")
+        return (
+            f"{scheme}://{username}:{password}@"
+            f"{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{database}"
+        )
 
     def get_redis_url(self) -> str:
         if self.REDIS_URL:
             return self.REDIS_URL
-        return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        password = quote(self.REDIS_PASSWORD, safe="")
+        return f"redis://:{password}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     def get_cors_origins(self) -> list[str]:
         return [

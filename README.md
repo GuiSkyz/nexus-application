@@ -125,6 +125,14 @@ Consulte `docs/deployment/staging.md` para preparar o arquivo `.env.staging`, va
 
 ---
 
+## Produção
+
+Produção possui um Compose dedicado, com variáveis obrigatórias, serviços de dados sem portas públicas e exposição do Nginx restrita a `127.0.0.1:8080` por padrão.
+
+Consulte `docs/deployment/production.md` para preparar o arquivo `.env.production`, configurar TLS no proxy externo, validar e subir o ambiente.
+
+---
+
 ## Troubleshooting Inicial
 
 - **Erro de Conexão no `/health/ready` (`minio: unhealthy` ou `postgres: unhealthy`):**

@@ -16,6 +16,8 @@ from app.application.services.inspection_report import (
     generate_inspection_report,
 )
 from app.infrastructure.minio.report_storage import get_report_storage
+from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.models.incident_model import IncidentModel
 
 router = APIRouter(prefix="/inspections", tags=["Inspeções & Sincronização"])
 
@@ -127,6 +129,48 @@ async def sync_offline_inspections(batch: SyncBatchRequest) -> SyncBatchResponse
         else:
             processed_uuids.add(client_uuid)
             synced_count += 1
+            
+            # Autocreate incidents for NAO_CONFORME
+            if item.entityType == "INSPECTION" and item.payload:
+                answers = item.payload.get("answers", {})
+                questions = item.payload.get("questions", [])
+                title = item.payload.get("title", "Inspeção Offline")
+                
+                context = item.payload.get("context", {})
+                vehicle_plate = context.get("plate", "N/A")
+                vehicle_model = context.get("model", "N/A")
+                technician_name = context.get("technicianName", "Desconhecido")
+                team_name = context.get("teamName", "Geral")
+                
+                q_dict = {q.get("id"): q for q in questions}
+                
+                async with AsyncSessionLocal() as session:
+                    import random
+                    for q_id, ans in answers.items():
+                        if ans == "NAO_CONFORME":
+                            q_data = q_dict.get(q_id, {})
+                            question_text = q_data.get("questionText", "Item Inconforme")
+                            category = q_data.get("category", "Geral")
+                            
+                            new_incident = IncidentModel(
+                                code=f"NC-{datetime.now(timezone.utc).strftime('%Y%m')}-{random.randint(1000, 9999)}",
+                                inspection_id=client_uuid,
+                                inspection_title=title,
+                                context_type="VEHICLE",
+                                vehicle_plate=vehicle_plate,
+                                vehicle_model=vehicle_model,
+                                technician_name=technician_name,
+                                team_name=team_name,
+                                category=category,
+                                question_text=question_text,
+                                severity="ALTA" if "pneu" in category.lower() or "freio" in category.lower() else "MEDIA",
+                                status="ABERTA",
+                                description="Detectado automaticamente via sincronização de vistoria mobile."
+                            )
+                            session.add(new_incident)
+                    
+                    await session.commit()
+
             results.append(
                 SyncItemResult(
                     id=client_uuid,

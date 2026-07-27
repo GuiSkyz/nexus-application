@@ -31,6 +31,10 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
   const [notes, setNotes] = useState<string>(inspection.notes || "");
   const [saving, setSaving] = useState<boolean>(false);
 
+  // Grupos por Categoria
+  const categories = Array.from(new Set(inspection.questions.map((q) => q.category)));
+  const [activeCategory, setActiveCategory] = useState<string | null>(categories.length > 0 ? categories[0] : null);
+
   const totalQuestions = inspection.questions.length;
   const answeredCount = Object.keys(answers).length;
   const pendingCount = totalQuestions - answeredCount;
@@ -81,9 +85,6 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       Alert.alert("Erro ao Salvar", "Ocorreu uma falha ao gravar a vistoria no dispositivo.");
     }
   };
-
-  // Grupos por Categoria
-  const categories = Array.from(new Set(inspection.questions.map((q) => q.category)));
 
   return (
     <View style={styles.container}>
@@ -162,16 +163,36 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
           </View>
         </View>
 
-        {/* Grupos de Categorias do Checklist */}
+        {/* Grupos de Categorias do Checklist (Sanfona) */}
         {categories.map((categoryName) => {
           const categoryQuestions = inspection.questions.filter((q) => q.category === categoryName);
+          const isCategoryActive = activeCategory === categoryName;
+          
+          // Quantidade respondida desta categoria
+          const catAnsweredCount = categoryQuestions.filter(q => answers[q.id]).length;
+          const isCatComplete = catAnsweredCount === categoryQuestions.length;
 
           return (
             <View key={categoryName} style={styles.categorySection}>
-              {/* Título da Categoria em Caixa Alta */}
-              <Text style={styles.categorySectionHeader}>{categoryName.toUpperCase()}</Text>
+              {/* Cabeçalho da Categoria (Clicável para Sanfona) */}
+              <TouchableOpacity 
+                style={styles.categoryAccordionHeader} 
+                onPress={() => setActiveCategory(isCategoryActive ? null : categoryName)}
+                activeOpacity={0.8}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.categorySectionHeader}>{categoryName.toUpperCase()}</Text>
+                  <Text style={{ fontSize: 12, color: isCatComplete ? colors.success.DEFAULT : colors.text.muted, marginTop: 2 }}>
+                    {catAnsweredCount} de {categoryQuestions.length} respondidas
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 18, color: colors.text.muted }}>
+                  {isCategoryActive ? "▲" : "▼"}
+                </Text>
+              </TouchableOpacity>
 
-              {categoryQuestions.map((q: ChecklistQuestion, index: number) => {
+              {/* Corpo da Sanfona: Mostra apenas se estiver ativa */}
+              {isCategoryActive && categoryQuestions.map((q: ChecklistQuestion, index: number) => {
                 const currentAnswer = answers[q.id];
                 const isSelectedOk = currentAnswer === "CONFORME";
                 const isSelectedNok = currentAnswer === "NAO_CONFORME";
@@ -194,7 +215,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                       )}
                     </View>
 
-                    {/* Botões de Ação estilo FieldOps: [ ✕ Nok ] e [ ✓ Ok ] */}
+                    {/* Botões de Ação: [ Sim ] e [ Não ] e [ Sem Resposta ] */}
                     <View style={styles.actionButtonsRow}>
                       <TouchableOpacity
                         style={[styles.nokBtn, isSelectedNok && styles.nokBtnActive]}
@@ -202,7 +223,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         <Text style={[styles.nokBtnText, isSelectedNok && styles.nokBtnTextActive]}>
-                          ✕ Nok
+                          Não
                         </Text>
                       </TouchableOpacity>
 
@@ -212,7 +233,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         <Text style={[styles.okBtnText, isSelectedOk && styles.okBtnTextActive]}>
-                          ✓ Ok
+                          Sim
                         </Text>
                       </TouchableOpacity>
 
@@ -222,16 +243,16 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         <Text style={[styles.naBtnText, currentAnswer === "NA" && styles.naBtnTextActive]}>
-                          N/A
+                          Sem Resposta
                         </Text>
                       </TouchableOpacity>
                     </View>
 
-                    {/* Alerta de NC se marcado Nok */}
+                    {/* Alerta de NC se marcado Não */}
                     {isSelectedNok && (
                       <View style={styles.ncAlertNotice}>
                         <Text style={styles.ncAlertNoticeText}>
-                          ⚠️ Resposta Nok: Será aberto um chamado de Não Conformidade para a Supervisão.
+                          ⚠️ Item Inconforme: Um incidente de Ação Corretiva será aberto automaticamente para seu supervisor na sincronização. Recomenda-se adicionar foto.
                         </Text>
                       </View>
                     )}
@@ -254,6 +275,8 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                   </View>
                 );
               })}
+              {/* Fim do Corpo da Sanfona */}
+
             </View>
           );
         })}
@@ -498,13 +521,22 @@ const styles = StyleSheet.create({
   categorySection: {
     marginBottom: spacing[4],
   },
-  categorySectionHeader: {
-    color: colors.text.muted,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.8,
+  categoryAccordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface.card,
+    padding: spacing[3],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.default,
     marginBottom: spacing[2],
-    marginTop: spacing[2],
+  },
+  categorySectionHeader: {
+    color: colors.text.primary,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   questionCard: {
     backgroundColor: colors.surface.card,

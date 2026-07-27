@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -16,14 +16,14 @@ import {
   X,
   CheckSquare,
 } from "lucide-react";
-import { MockIncidentService } from "@/lib/mockIncidents";
+import { ApiClient } from "@/lib/apiClient";
 import { Incident, IncidentSeverity, IncidentStatus } from "@/types/incident";
 import { useRole } from "@/components/nexus/role-selector";
 import { KpiCard } from "@/components/nexus/kpi-card";
 
 export default function IncidentsPage() {
   const { activeUser, permissions } = useRole();
-  const [incidents, setIncidents] = useState<Incident[]>(MockIncidentService.getIncidents());
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
@@ -41,7 +41,21 @@ export default function IncidentsPage() {
   // Form de Resolução
   const [resolutionNotes, setResolutionNotes] = useState("");
 
-  const kpis = MockIncidentService.getKPIs();
+  const loadData = async () => {
+    const data = await ApiClient.fetchIncidents();
+    setIncidents(data);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const kpis = {
+    total: incidents.length,
+    open: incidents.filter((i) => i.status === "ABERTA").length,
+    inActionPlan: incidents.filter((i) => i.status === "PLANO_DE_ACAO").length,
+    resolved: incidents.filter((i) => i.status === "RESOLVIDA").length,
+  };
 
   const filteredIncidents = incidents.filter((incident) => {
     const matchesSearch =
@@ -64,19 +78,18 @@ export default function IncidentsPage() {
     setIsPlanModalOpen(true);
   };
 
-  const handleSavePlan = (e: React.FormEvent) => {
+  const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIncident || !planDescription || !planAssignedTo) return;
 
-    const updated = MockIncidentService.addActionPlan(
-      selectedIncident.id,
-      planDescription,
-      planAssignedTo,
-      planDueDate,
-      activeUser
-    );
+    await ApiClient.createActionPlan(selectedIncident.id, {
+      description: planDescription,
+      assignedTo: planAssignedTo,
+      dueDate: planDueDate,
+      createdBy: activeUser
+    });
 
-    setIncidents(MockIncidentService.getIncidents());
+    await loadData();
     setIsPlanModalOpen(false);
   };
 
@@ -86,12 +99,15 @@ export default function IncidentsPage() {
     setIsResolveModalOpen(true);
   };
 
-  const handleSaveResolution = (e: React.FormEvent) => {
+  const handleSaveResolution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIncident || !resolutionNotes) return;
 
-    MockIncidentService.resolveIncident(selectedIncident.id, resolutionNotes);
-    setIncidents(MockIncidentService.getIncidents());
+    await ApiClient.resolveIncident(selectedIncident.id, {
+      resolutionNotes
+    });
+    
+    await loadData();
     setIsResolveModalOpen(false);
   };
 

@@ -7,6 +7,7 @@ from app.interfaces.api.v1.checklists import router as checklists_router
 from app.interfaces.api.v1.incidents import router as incidents_router
 from app.interfaces.api.v1.apr import router as apr_router
 from app.interfaces.api.v1.reports import router as reports_router
+from app.interfaces.api.v1.dashboard import router as dashboard_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -17,3 +18,4 @@ api_router.include_router(checklists_router)
 api_router.include_router(incidents_router)
 api_router.include_router(apr_router)
 api_router.include_router(reports_router)
+api_router.include_router(dashboard_router)

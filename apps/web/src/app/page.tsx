@@ -38,13 +38,23 @@ export default function DashboardPage() {
       minio: "unknown",
     },
   });
+  const [kpis, setKpis] = useState<{
+    inspections_today: number;
+    pending_aprs: number;
+    active_vehicles: number;
+    incidents_pending: number;
+  } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     setIsRefreshing(true);
-    const result = await ApiClient.checkReadiness();
+    const [result, kpiResult] = await Promise.all([
+      ApiClient.checkReadiness(),
+      ApiClient.fetchDashboardKpis(),
+    ]);
     setReadiness(result);
+    setKpis(kpiResult);
     setLastChecked(new Date().toLocaleTimeString("pt-BR"));
     setIsRefreshing(false);
   }, []);
@@ -123,24 +133,24 @@ export default function DashboardPage() {
             />
             <KpiCard
               label="Inspeções Hoje"
-              value="—"
-              context="Módulo em implementação"
+              value={kpis ? kpis.inspections_today.toString() : "—"}
+              context="Vistorias em tempo real"
               status="neutral"
               icon={<ClipboardCheck size={16} />}
             />
             <KpiCard
               label="APRs Pendentes"
-              value="—"
-              context="Módulo em implementação"
-              status="neutral"
+              value={kpis ? kpis.pending_aprs.toString() : "—"}
+              context="Aguardando liberação"
+              status={kpis && kpis.pending_aprs > 0 ? "warning" : "neutral"}
               icon={<AlertTriangle size={16} />}
             />
             <KpiCard
-              label="Veículos Ativos"
-              value="—"
-              context="Módulo em implementação"
-              status="neutral"
-              icon={<Truck size={16} />}
+              label="Não Conformidades"
+              value={kpis ? kpis.incidents_pending.toString() : "—"}
+              context="Ações Corretivas Pendentes"
+              status={kpis && kpis.incidents_pending > 0 ? "danger" : "success"}
+              icon={<Shield size={16} />}
             />
           </div>
         </section>

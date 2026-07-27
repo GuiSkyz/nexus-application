@@ -1,143 +1,131 @@
 # NexusOps — Operational Compliance Platform
 
-**NexusOps** é uma plataforma de conformidade operacional projetada para provedores de internet (ISPs). Ela atua de forma complementar ao ERP oficial **MK Solutions**, provendo inspeções operacionais, verificação de saída de veículos, Análises Preliminares de Risco (APR), checklists configuráveis, evidências fotográficas e assinaturas digitais com resiliência e suporte completo à operação **Offline-First**.
+O **NexusOps** é uma plataforma de conformidade operacional para provedores de
+internet. A aplicação reúne inspeções, checklists, Análises Preliminares de
+Risco (APR), evidências fotográficas, assinaturas digitais e operação
+offline-first.
 
----
+## Requisitos
 
-## Requisitos de Sistema
+Para executar a plataforma completa:
 
-Para executar a plataforma em ambiente local, certifique-se de ter instalado:
-- **Docker** (v24.0+) & **Docker Compose** (v2.20+)
-- **Python** (3.11 ou 3.12) *(apenas para execução local isolada de desenvolvimento do backend)*
-- **Node.js** (v20 LTS+) & **npm/pnpm** *(apenas para execução local isolada da Web ou Mobile)*
+- Docker 24 ou superior;
+- Docker Compose 2.20 ou superior.
 
----
+Python 3.11 e Node.js 20 são necessários somente para desenvolvimento direto,
+fora dos containers.
 
-## Configuração Inicial
+## Configuração
 
-1. Clone o repositório e acesse o diretório raiz:
-   ```bash
-   git clone <URL_DO_REPOSITORIO> nexusops
-   cd nexusops
-   ```
+O projeto usa apenas:
 
-2. Crie o arquivo de configuração `.env` a partir do modelo estruturado:
-   ```bash
-   cp .env.example .env
-   ```
-   *(Nota: O arquivo `.env.example` já está pré-configurado com valores seguros para desenvolvimento local com Docker Compose).*
-
----
-
-## Execução com Docker Compose (Recomendado)
-
-A infraestrutura completa foi projetada em contêineres autossuficientes com verificação de integridade (`health checks`).
-
-1. **Subir toda a infraestrutura:**
-   ```bash
-   docker compose up -d --build
-   ```
-
-2. **Verificar o status e a saúde dos serviços:**
-   ```bash
-   docker compose ps
-   ```
-   Todos os contêineres (`postgres`, `redis`, `minio`, `api`, `web`) devem constar como `healthy` ou `running`.
-
-3. **Endpoints de Verificação da API (Health Checks):**
-   - Liveness Probe: `http://localhost:8000/api/v1/health`
-   - Readiness Probe (Verifica conexão com Postgres, Redis e MinIO): `http://localhost:8000/api/v1/health/ready`
-
-4. **Painéis de Acesso Local:**
-   - **API Swagger Documentation:** `http://localhost:8000/docs`
-   - **Aplicação Web (Next.js):** `http://localhost:3000`
-   - **MinIO Console (Storage):** `http://localhost:9001` *(Usuário/Senha: `nexusops_minio_admin` / `nexusops_minio_secure_pass`)*
-
-5. **Derrubar os serviços:**
-   ```bash
-   docker compose down
-   ```
-   *(Para limpar os volumes persistentes, utilize `docker compose down -v`)*.
-
----
-
-## Execução Isolada de Desenvolvimento (Sem Docker Completo)
-
-Caso deseje rodar a API, Web ou Mobile diretamente na sua máquina local (usando apenas o Postgres, Redis e MinIO via Docker):
-
-### 1. Subir apenas os serviços de infraestrutura:
-```bash
-docker compose up -d postgres redis minio minio-init
+```text
+docker-compose.yml
+.env
 ```
 
-### 2. Rodar a API FastAPI localmente (`apps/api`):
+Crie o `.env` local:
+
+```bash
+cp .env.example .env
+```
+
+O Docker Compose carrega esse arquivo automaticamente. Não use nomes como
+`.env.production` ou `.env.staging`; cada máquina mantém seu próprio `.env`.
+
+Para produção, configure no mínimo:
+
+```dotenv
+ENVIRONMENT=production
+DEBUG=false
+SECRET_KEY=<segredo-aleatorio-com-pelo-menos-64-caracteres>
+CORS_ORIGINS=https://seu-dominio.example.com
+POSTGRES_PASSWORD=<senha-forte>
+REDIS_PASSWORD=<senha-forte>
+MINIO_ROOT_PASSWORD=<senha-forte>
+```
+
+O `.env` contém segredos e nunca deve ser versionado.
+
+## Docker
+
+Validar a configuração:
+
+```bash
+docker compose config --quiet
+```
+
+Construir e subir:
+
+```bash
+docker compose up -d --build
+```
+
+Verificar os serviços:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 api nginx
+```
+
+Encerrar sem apagar os dados:
+
+```bash
+docker compose down
+```
+
+Não execute `docker compose down -v` em staging ou produção. A opção `-v`
+remove os volumes persistentes.
+
+## Acesso
+
+Por padrão, o Nginx publica a aplicação somente em `127.0.0.1:8080`:
+
+- Aplicação Web: `http://127.0.0.1:8080`;
+- Swagger: `http://127.0.0.1:8080/docs`;
+- Health: `http://127.0.0.1:8080/api/v1/health`;
+- Readiness: `http://127.0.0.1:8080/api/v1/health/ready`.
+
+PostgreSQL, Redis, MinIO, API e Web permanecem na rede interna do Compose. Em
+produção, um proxy reverso ou balanceador deve fornecer TLS e encaminhar para
+`127.0.0.1:8080`.
+
+## Ambientes
+
+A estrutura dos containers é sempre a mesma. Somente os valores do `.env`
+mudam:
+
+- desenvolvimento: `ENVIRONMENT=development` e `DEBUG=true`;
+- staging: `ENVIRONMENT=staging` e `DEBUG=false`;
+- produção: `ENVIRONMENT=production` e `DEBUG=false`.
+
+Consulte [docs/deployment/docker.md](docs/deployment/docker.md) para o fluxo
+operacional completo.
+
+## Desenvolvimento direto
+
+API:
+
 ```bash
 cd apps/api
 python -m venv venv
-# Windows (PowerShell):
 .\venv\Scripts\Activate.ps1
-# Linux/macOS:
-# source venv/bin/activate
-
 pip install -e .[dev]
-alembic upgrade head
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+pytest -v --cov=app
 ```
 
-### 3. Rodar o Frontend Web (`apps/web`):
+Web:
+
 ```bash
 cd apps/web
 npm install
 npm run dev
 ```
 
-### 4. Rodar o Mobile (`apps/mobile`):
+Mobile:
+
 ```bash
 cd apps/mobile
 npm install
 npx expo start
 ```
-
----
-
-## Execução de Testes Automatizados
-
-A suite de testes da API foi desenvolvida em `pytest` garantindo isolamento e verificação de contratos:
-
-### Rodar os testes via Docker Compose:
-```bash
-docker compose exec api pytest -v
-```
-
-### Rodar os testes localmente no ambiente virtual (`apps/api`):
-```bash
-cd apps/api
-pytest -v --cov=app
-```
-
----
-
-## Staging
-
-A configuração de staging usa variáveis obrigatórias, serviços internos sem portas públicas e migrations automáticas antes da inicialização da API.
-
-Consulte `docs/deployment/staging.md` para preparar o arquivo `.env.staging`, validar o Compose e executar o ambiente.
-
----
-
-## Produção
-
-Produção possui um Compose dedicado, com variáveis obrigatórias, serviços de dados sem portas públicas e exposição do Nginx restrita a `127.0.0.1:8080` por padrão.
-
-Consulte `docs/deployment/production.md` para preparar o arquivo `.env.production`, configurar TLS no proxy externo, validar e subir o ambiente.
-
----
-
-## Troubleshooting Inicial
-
-- **Erro de Conexão no `/health/ready` (`minio: unhealthy` ou `postgres: unhealthy`):**
-  Aguarde 10 a 15 segundos após a subida dos contêineres. O script de inicialização do MinIO (`minio-init`) precisa de tempo para provisionar o bucket `nexusops-storage`. Verifique os logs com `docker compose logs -f minio-init api`.
-- **Portas em Uso (`5432`, `6379`, `8000`, `3000` ou `9000/9001`):**
-  Certifique-se de que não há instâncias locais do PostgreSQL ou Redis rodando na máquina host que conflitem com as portas dos contêineres do Docker.
-- **Falha de Permissões ou Variáveis Ausentes:**
-  Verifique se o arquivo `.env` foi gerado corretamente a partir de `.env.example` no diretório raiz do monorepo.

@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { AppSidebar } from "./app-sidebar";
-import { AuthGate, useAuth } from "./auth-provider";
-import { RoleProvider } from "./role-selector";
+import { AuthGate } from "./auth-provider";
+import { RoleProvider, useRole } from "./role-selector";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -20,12 +20,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function AuthorizedShell({ children }: { children: React.ReactNode }) {
+  return (
+    <RoleProvider>
+      <RoleAwareShell>{children}</RoleAwareShell>
+    </RoleProvider>
+  );
+}
+
+function RoleAwareShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { activeRole } = useRole();
   const technicianAllowed =
     pathname === "/vehicles" || pathname === "/account";
-  const mustRedirect = user?.role === "TECNICO" && !technicianAllowed;
+  const mustRedirect = activeRole === "TECNICO" && !technicianAllowed;
 
   useEffect(() => {
     if (mustRedirect) router.replace("/vehicles");
@@ -42,11 +50,11 @@ function AuthorizedShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <RoleProvider>
+    <>
       <AppSidebar />
       <div className="flex min-h-screen flex-col lg:ml-[var(--sidebar-width)]">
         {children}
       </div>
-    </RoleProvider>
+    </>
   );
 }

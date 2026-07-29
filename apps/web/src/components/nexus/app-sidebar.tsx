@@ -15,7 +15,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { useAuth } from "./auth-provider";
+import { useRole } from "./role-selector";
 import { UserRole } from "@/types/checklist";
 
 interface NavItem {
@@ -125,7 +125,7 @@ const navigation: NavGroup[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { activeRole } = useRole();
 
   return (
     <aside
@@ -154,7 +154,7 @@ export function AppSidebar() {
       <nav className="custom-scrollbar flex-1 space-y-6 overflow-y-auto px-3 py-4">
         {navigation.map((group) => {
           const items = group.items.filter(
-            (item) => user && item.allowedRoles.includes(user.role),
+            (item) => item.allowedRoles.includes(activeRole),
           );
           if (!items.length) return null;
 

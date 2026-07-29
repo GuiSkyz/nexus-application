@@ -51,10 +51,10 @@ export default function IncidentsPage() {
   }, []);
 
   const kpis = {
-    total: incidents.length,
-    open: incidents.filter((i) => i.status === "ABERTA").length,
+    totalOpen: incidents.filter((i) => i.status === "ABERTA").length,
+    criticalCount: incidents.filter((i) => i.severity === "CRITICA").length,
     inActionPlan: incidents.filter((i) => i.status === "PLANO_DE_ACAO").length,
-    resolved: incidents.filter((i) => i.status === "RESOLVIDA").length,
+    resolvedThisMonth: incidents.filter((i) => i.status === "RESOLVIDA").length,
   };
 
   const filteredIncidents = incidents.filter((incident) => {

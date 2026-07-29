@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
+import { CheckCircle2, RefreshCw, ShieldCheck } from "@tamagui/lucide-icons-2";
 import { SyncQueueItem } from "../types";
 import { OfflineStorage } from "../services/offline/storage";
 import { SyncOrchestrator } from "../services/offline/syncQueue";
@@ -47,10 +48,9 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
       <View style={styles.content}>
         {/* Banner Explicativo */}
         <View style={styles.infoBanner}>
-          <Text style={styles.bannerTitle}>📦 Armazenamento Offline-First</Text>
+          <View style={styles.bannerTitleRow}><ShieldCheck size={20} color={colors.blue[600]} /><Text style={styles.bannerTitle}>Salvo neste aparelho</Text></View>
           <Text style={styles.bannerSubtitle}>
-            Os itens abaixo foram salvos com UUIDv4 no dispositivo e estão aguardando
-            sincronização com o backend FastAPI.
+            Cada registro recebeu um identificador único e será enviado assim que houver rede.
           </Text>
 
           <TouchableOpacity
@@ -62,7 +62,10 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
             {syncing ? (
               <ActivityIndicator color={colors.text.inverse} size="small" />
             ) : (
-              <Text style={styles.syncButtonText}>🔄 Tentar Sincronizar Agora</Text>
+              <>
+                <RefreshCw size={18} color={colors.text.inverse} />
+                <Text style={styles.syncButtonText}>Sincronizar agora</Text>
+              </>
             )}
           </TouchableOpacity>
         </View>
@@ -71,7 +74,7 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
           <ActivityIndicator color={colors.blue[600]} size="large" style={{ marginTop: 40 }} />
         ) : queue.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>✅</Text>
+            <CheckCircle2 size={40} color={colors.success.DEFAULT} />
             <Text style={styles.emptyTitle}>Nenhum Item Pendente</Text>
             <Text style={styles.emptySubtitle}>
               Todas as suas vistorias e evidências já estão sincronizadas com o servidor.
@@ -85,6 +88,15 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
             renderItem={({ item }) => {
               const isHighlighted = item.id === highlightItemId;
               const payload = item.payload || {};
+              const isError = item.status === "ERROR";
+              const isPending = item.status === "PENDING" || item.status === "SYNCING";
+              const statusLabel = isError
+                ? "Falha no envio"
+                : item.status === "SYNCED"
+                  ? "Sincronizado"
+                  : item.status === "SYNCING"
+                    ? "Enviando"
+                    : "Aguardando rede";
 
               return (
                 <View
@@ -100,7 +112,9 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
                     <View
                       style={[
                         styles.statusPill,
-                        item.status === "PENDING"
+                        isError
+                          ? styles.statusPillError
+                          : isPending
                           ? styles.statusPillPending
                           : styles.statusPillSynced,
                       ]}
@@ -108,12 +122,14 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
                       <Text
                         style={[
                           styles.statusPillText,
-                          item.status === "PENDING"
+                          isError
+                            ? styles.statusPillTextError
+                            : isPending
                             ? styles.statusPillTextPending
                             : styles.statusPillTextSynced,
                         ]}
                       >
-                        {item.status === "PENDING" ? "PENDENTE DE SINCRONIZAÇÃO" : item.status}
+                        {statusLabel}
                       </Text>
                     </View>
                   </View>
@@ -129,6 +145,9 @@ export const SyncQueueScreen: React.FC<SyncQueueScreenProps> = ({ onBack, highli
                   )}
 
                   <Text style={styles.uuidText}>UUID Cliente: {item.id}</Text>
+                  {item.errorMessage && (
+                    <Text style={styles.errorMessage}>{item.errorMessage}</Text>
+                  )}
 
                   <View style={styles.cardFooter}>
                     <Text style={styles.timeText}>
@@ -193,6 +212,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 4,
   },
+  bannerTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
   bannerSubtitle: {
     color: colors.text.secondary,
     fontSize: 12,
@@ -204,6 +224,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 10,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
   },
   syncButtonText: {
     color: colors.text.inverse,
@@ -255,6 +279,9 @@ const styles = StyleSheet.create({
   statusPillSynced: {
     backgroundColor: colors.success.soft,
   },
+  statusPillError: {
+    backgroundColor: colors.danger.soft,
+  },
   statusPillText: {
     fontSize: 10,
     fontWeight: "700",
@@ -264,6 +291,9 @@ const styles = StyleSheet.create({
   },
   statusPillTextSynced: {
     color: colors.success.foreground,
+  },
+  statusPillTextError: {
+    color: colors.danger.foreground,
   },
   itemTitle: {
     color: colors.text.primary,
@@ -280,6 +310,12 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     fontSize: 10,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    marginBottom: 8,
+  },
+  errorMessage: {
+    color: colors.danger.foreground,
+    fontSize: 12,
+    lineHeight: 18,
     marginBottom: 8,
   },
   cardFooter: {

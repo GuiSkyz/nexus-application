@@ -39,7 +39,7 @@ export function KpiCard({ label, value, context, status = "neutral", icon }: Kpi
     >
       <div className="flex items-start justify-between mb-3">
         <span
-          className="text-xs font-medium uppercase tracking-wide"
+          className="text-xs font-medium"
           style={{ color: "var(--text-secondary)" }}
         >
           {label}

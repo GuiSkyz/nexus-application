@@ -9,7 +9,8 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { colors, radius, spacing, shadow } from "../theme/tokens";
+import { ShieldCheck } from "@tamagui/lucide-icons-2";
+import { colors, control, radius, shadow, spacing, typography } from "../theme/tokens";
 
 interface LoginScreenProps {
   onLoginSuccess: (user: { name: string; role: string }) => void;
@@ -17,7 +18,7 @@ interface LoginScreenProps {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState("tecnico.silva@nexusops.com");
-  const [password, setPassword] = useState("••••••••");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = () => {
@@ -25,8 +26,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setTimeout(() => {
       setLoading(false);
       onLoginSuccess({
-        name: "Carlos Silva (Técnico de Campo)",
-        role: "Técnico Operacional - Equipe Alfa",
+        name: "Carlos Silva",
+        role: "Técnico operacional · Equipe Alfa",
       });
     }, 600);
   };
@@ -43,14 +44,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <Text style={styles.logoText}>N</Text>
           </View>
           <Text style={styles.title}>NexusOps Mobile</Text>
-          <Text style={styles.subtitle}>Operational Compliance Platform</Text>
+          <Text style={styles.subtitle}>Conformidade operacional para campo</Text>
         </View>
 
         {/* Form Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Acesso do Técnico</Text>
+          <Text style={styles.cardTitle}>Acesso do técnico</Text>
           <Text style={styles.cardSubtitle}>
-            Digite suas credenciais corporativas para realizar inspeções de campo.
+            Entre para registrar inspeções, evidências e atividades com segurança.
           </Text>
 
           <View style={styles.field}>
@@ -62,6 +63,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               placeholder="seu.email@provedor.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              accessibilityLabel="E-mail corporativo"
             />
           </View>
 
@@ -73,6 +75,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               onChangeText={setPassword}
               secureTextEntry
               placeholder="Sua senha"
+              accessibilityLabel="Senha"
             />
           </View>
 
@@ -81,6 +84,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             onPress={handleLogin}
             disabled={loading}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Entrar no NexusOps"
           >
             {loading ? (
               <ActivityIndicator color={colors.text.inverse} size="small" />
@@ -92,9 +97,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         {/* Badge Offline Info */}
         <View style={styles.footerNotice}>
-          <Text style={styles.footerNoticeText}>
-            🔒 Modo Offline Habilitado: Suas vistorias serão salvas localmente e sincronizadas quando houver rede.
-          </Text>
+          <ShieldCheck size={18} color={colors.blue[600]} />
+          <Text style={styles.footerNoticeText}>As vistorias ficam salvas neste aparelho e sincronizam quando houver rede.</Text>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -127,7 +131,7 @@ const styles = StyleSheet.create({
   },
   logoText: {
     color: colors.text.inverse,
-    fontSize: 24,
+    ...typography.heading,
     fontWeight: "700",
   },
   title: {
@@ -175,26 +179,30 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
     borderRadius: radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    minHeight: control.inputHeight,
+    fontSize: typography.body.fontSize,
     color: colors.text.primary,
   },
   button: {
     backgroundColor: colors.blue[600],
     borderRadius: radius.md,
-    paddingVertical: 12,
+    minHeight: control.buttonHeight,
     alignItems: "center",
     justifyContent: "center",
     marginTop: spacing[2],
   },
   buttonText: {
     color: colors.text.inverse,
-    fontSize: 14,
+    ...typography.label,
     fontWeight: "600",
   },
   footerNotice: {
     marginTop: spacing[6],
     paddingHorizontal: spacing[4],
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
   footerNoticeText: {
     color: colors.text.muted,

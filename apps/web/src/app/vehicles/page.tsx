@@ -22,6 +22,7 @@ import {
   Wrench,
   ShieldCheck,
 } from "lucide-react";
+import { KpiCard } from "@/components/nexus/kpi-card";
 
 export default function VehiclesPage() {
   const { activeRole, activeUser, permissions } = useRole();
@@ -166,43 +167,8 @@ export default function VehiclesPage() {
 
         {/* Resumo da Frota */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-          <div
-            className="p-4 flex items-center justify-between"
-            style={{
-              backgroundColor: "var(--surface-card)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <div>
-              <p className="text-xs uppercase font-medium" style={{ color: "var(--text-muted)" }}>
-                Total da Frota
-              </p>
-              <p className="text-2xl font-bold mt-1" style={{ color: "var(--text-primary)" }}>
-                {vehicles.length} veículos
-              </p>
-            </div>
-            <Truck size={22} style={{ color: "var(--nexus-blue-600)" }} />
-          </div>
-
-          <div
-            className="p-4 flex items-center justify-between"
-            style={{
-              backgroundColor: "var(--surface-card)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <div>
-              <p className="text-xs uppercase font-medium" style={{ color: "var(--text-muted)" }}>
-                Disponíveis
-              </p>
-              <p className="text-2xl font-bold mt-1" style={{ color: "var(--success)" }}>
-                {vehicles.filter((v) => v.status === "DISPONIVEL").length}
-              </p>
-            </div>
-            <CheckCircle2 size={22} style={{ color: "var(--success)" }} />
-          </div>
+          <KpiCard label="Total da frota" value={vehicles.length} context="Veículos cadastrados" icon={<Truck size={18} />} />
+          <KpiCard label="Disponíveis" value={vehicles.filter((v) => v.status === "DISPONIVEL").length} context="Prontos para operação" status="success" icon={<CheckCircle2 size={18} />} />
 
           <div
             className="p-4 flex items-center justify-between"

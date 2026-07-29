@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
+import { Car, HardHat, ShieldAlert, ChevronRight } from "@tamagui/lucide-icons-2";
 import { mockVehicleShift, mockTodayActivity, mockContextualChecklists } from "../services/mockMobileData";
 import { ContextualChecklist } from "../types";
 import { VehicleSelectorModal, VehicleOption } from "./VehicleSelectorModal";
@@ -35,7 +36,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
             onPress={() => setIsVehicleModalOpen(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.selectVehicleBtnText}>🚗 {selectedVehicleOption.plate} ▾</Text>
+            <Text style={styles.selectVehicleBtnText}>{selectedVehicleOption.plate} · Selecionar</Text>
           </TouchableOpacity>
         </View>
 
@@ -78,7 +79,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
           <View key={item.id} style={styles.taskCard}>
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardIconBox}>
-                <Text style={{ fontSize: 20 }}>🚗</Text>
+                <Car size={20} color={colors.blue[600]} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardMainTitle}>{item.title}</Text>
@@ -108,7 +109,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
               onPress={() => onOpenChecklist(item)}
               activeOpacity={0.85}
             >
-              <Text style={styles.continueBtnText}>Continuar ➔</Text>
+              <Text style={styles.continueBtnText}>Continuar</Text><ChevronRight size={18} color={colors.text.inverse} />
             </TouchableOpacity>
           </View>
         ))}
@@ -118,7 +119,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
           <View key={item.id} style={styles.taskCard}>
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardIconBox}>
-                <Text style={{ fontSize: 20 }}>🛡️</Text>
+                <HardHat size={20} color={colors.blue[600]} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardMainTitle}>{item.title}</Text>
@@ -147,7 +148,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
               onPress={() => onOpenChecklist(item)}
               activeOpacity={0.8}
             >
-              <Text style={styles.startBtnText}>Iniciar ➔</Text>
+              <Text style={styles.startBtnText}>Iniciar</Text><ChevronRight size={18} color={colors.text.primary} />
             </TouchableOpacity>
           </View>
         ))}
@@ -157,7 +158,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
           <View key={item.id} style={styles.taskCard}>
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardIconBox}>
-                <Text style={{ fontSize: 20 }}>⚠️</Text>
+                <ShieldAlert size={20} color={colors.warning.foreground} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardMainTitle}>{item.title}</Text>
@@ -186,7 +187,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ onOpenChecklist })
               onPress={() => onOpenChecklist(item)}
               activeOpacity={0.85}
             >
-              <Text style={styles.continueBtnText}>Continuar ➔</Text>
+              <Text style={styles.continueBtnText}>Continuar</Text><ChevronRight size={18} color={colors.text.inverse} />
             </TouchableOpacity>
           </View>
         ))}
@@ -371,6 +372,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 10,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
   },
   continueBtnText: {
     color: colors.text.inverse,
@@ -382,6 +387,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 10,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
   },
   startBtnText: {
     color: colors.text.primary,

@@ -34,7 +34,11 @@ export class SyncOrchestrator {
           await OfflineStorage.updateSyncItemStatus(item.id, "SYNCED");
         } else {
           // Em caso de desconexão, simulação offline inteligente (marca como SYNCED no simulador)
-          await OfflineStorage.updateSyncItemStatus(item.id, "SYNCED");
+          await OfflineStorage.updateSyncItemStatus(
+            item.id,
+            "ERROR",
+            "Sem conexão com o servidor. O envio será tentado novamente."
+          );
         }
       }
     } finally {

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
+import { ChevronRight } from "@tamagui/lucide-icons-2";
 import { getResponsivePaddingTop, getResponsivePaddingBottom } from "../theme/responsive";
 import { mockContextualChecklists } from "../services/mockMobileData";
 import { ContextualChecklist } from "../types";
@@ -47,7 +48,7 @@ export const AllChecklistsScreen: React.FC<AllChecklistsScreenProps> = ({ onOpen
             onPress={() => setSelectedFilter("VEHICLE")}
           >
             <Text style={[styles.chipText, selectedFilter === "VEHICLE" && styles.chipTextActive]}>
-              🚗 Veículo
+              Veículo
             </Text>
           </TouchableOpacity>
 
@@ -56,7 +57,7 @@ export const AllChecklistsScreen: React.FC<AllChecklistsScreenProps> = ({ onOpen
             onPress={() => setSelectedFilter("INDIVIDUAL")}
           >
             <Text style={[styles.chipText, selectedFilter === "INDIVIDUAL" && styles.chipTextActive]}>
-              👤 Individuais
+              Individuais
             </Text>
           </TouchableOpacity>
 
@@ -65,7 +66,7 @@ export const AllChecklistsScreen: React.FC<AllChecklistsScreenProps> = ({ onOpen
             onPress={() => setSelectedFilter("ACTIVITY")}
           >
             <Text style={[styles.chipText, selectedFilter === "ACTIVITY" && styles.chipTextActive]}>
-              ⚡ Atividades & APR
+              Atividades e APR
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -95,7 +96,7 @@ export const AllChecklistsScreen: React.FC<AllChecklistsScreenProps> = ({ onOpen
                 onPress={() => onOpenChecklist(item)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.openBtnText}>Abrir ➔</Text>
+                <ChevronRight size={18} color={colors.blue[600]} />
               </TouchableOpacity>
             </View>
           </View>
@@ -134,7 +135,8 @@ const styles = StyleSheet.create({
   },
   chipItem: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: radius.md,
     backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
@@ -217,8 +219,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   openBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "center",
   },
   openBtnText: {
     color: colors.blue[600],

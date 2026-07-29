@@ -72,7 +72,7 @@ export function AppSidebar() {
       {/* Brand Header */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-nexus-blue-600 to-nexus-cyan-500 flex items-center justify-center font-black text-white text-base shadow-md shadow-nexus-blue-600/30 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-nexus-blue-600 flex items-center justify-center font-black text-white text-base flex-shrink-0">
             N
           </div>
           {!collapsed && (
@@ -108,7 +108,7 @@ export function AppSidebar() {
                       href={item.href}
                       className={`flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-lg transition-all duration-150 group ${
                         isActive
-                          ? "bg-gradient-to-r from-nexus-cyan-500/20 to-nexus-blue-600/10 text-white shadow-sm border-l-2 border-nexus-cyan-500"
+                          ? "bg-white/10 text-white"
                           : "text-slate-300 hover:bg-white/5 hover:text-white"
                       }`}
                       title={collapsed ? item.label : undefined}

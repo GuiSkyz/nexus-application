@@ -57,6 +57,8 @@
     --radius-md: 6px;
     --radius-lg: 10px;
     --radius-xl: 12px;
+    --control-height: 40px;
+    --transition-standard: 180ms cubic-bezier(0.16, 1, 0.3, 1);
 
     /* Sombras */
     --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
@@ -84,6 +86,14 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  button, a, input, select, textarea {
+    transition: background-color var(--transition-standard), border-color var(--transition-standard), color var(--transition-standard), box-shadow var(--transition-standard), transform var(--transition-standard);
+  }
+
+  button:active:not(:disabled) {
+    transform: scale(0.98);
   }
 }
 

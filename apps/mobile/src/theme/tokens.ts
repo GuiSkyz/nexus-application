@@ -74,9 +74,29 @@ export const colors = {
 
 export const radius = {
   sm: 4,
-  md: 6,
-  lg: 10,
+  md: 8,
+  lg: 12,
   xl: 12,
+} as const;
+
+export const typography = {
+  overline: { fontSize: 11, lineHeight: 16, fontWeight: "700" as const },
+  label: { fontSize: 13, lineHeight: 18, fontWeight: "700" as const },
+  body: { fontSize: 15, lineHeight: 22, fontWeight: "400" as const },
+  title: { fontSize: 20, lineHeight: 26, fontWeight: "700" as const },
+  heading: { fontSize: 26, lineHeight: 32, fontWeight: "800" as const },
+} as const;
+
+export const control = {
+  minTouchTarget: 48,
+  buttonHeight: 52,
+  inputHeight: 52,
+} as const;
+
+// Movimento de produto: imediato, firme e nunca decorativo.
+export const motion = {
+  pressScale: 0.98,
+  duration: 180,
 } as const;
 
 export const shadow = {

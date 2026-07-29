@@ -74,6 +74,8 @@ dist/
 *.mobileprovision
 *.orig.*
 web-build/
+*.tsbuildinfo
+apps/mobile/bundle.js
 
 # Docker & Infrastructure
 infrastructure/data/
@@ -85,3 +87,4 @@ minio_data/
 tmp/
 temp/
 scratch/
+.impeccable/

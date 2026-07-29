@@ -11,6 +11,7 @@ import {
 import { SignaturePad } from "../components/SignaturePad";
 import { mockTodayActivity, mockVehicleShift } from "../services/mockMobileData";
 import { OfflineStorage } from "../services/offline/storage";
+import { SyncOrchestrator } from "../services/offline/syncQueue";
 import { colors, radius, spacing } from "../theme/tokens";
 import { ContextualChecklist, DigitalSignature } from "../types";
 
@@ -140,6 +141,7 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
         canStartActivity: false,
       };
       const queued = await OfflineStorage.enqueueSyncItem("APR", payload);
+      void SyncOrchestrator.triggerSyncWorker();
       onSaveSuccess(queued.id);
     } catch {
       Alert.alert(
@@ -279,6 +281,7 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
 
         <TouchableOpacity
           accessibilityRole="button"
+          accessibilityLabel={saving ? "Salvando APR" : "Solicitar autorização do supervisor"}
           disabled={saving}
           onPress={submitApr}
           style={[styles.submitButton, saving && styles.submitButtonDisabled]}
@@ -308,11 +311,11 @@ const RiskControl: React.FC<RiskControlProps> = ({
   <View style={styles.riskControl}>
     <Text style={styles.riskControlLabel}>{label}</Text>
     <View style={styles.stepper}>
-      <TouchableOpacity onPress={onDecrease} style={styles.stepperButton}>
+      <TouchableOpacity onPress={onDecrease} style={styles.stepperButton} accessibilityRole="button" accessibilityLabel={`Diminuir ${label}`}>
         <Text style={styles.stepperButtonText}>−</Text>
       </TouchableOpacity>
       <Text style={styles.stepperValue}>{value}</Text>
-      <TouchableOpacity onPress={onIncrease} style={styles.stepperButton}>
+      <TouchableOpacity onPress={onIncrease} style={styles.stepperButton} accessibilityRole="button" accessibilityLabel={`Aumentar ${label}`}>
         <Text style={styles.stepperButtonText}>+</Text>
       </TouchableOpacity>
     </View>

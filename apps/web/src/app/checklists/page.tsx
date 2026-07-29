@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { AppHeader } from "@/components/nexus/app-header";
+import { KpiCard } from "@/components/nexus/kpi-card";
 import { useRole } from "@/components/nexus/role-selector";
 import { MockChecklistService } from "@/lib/mockChecklists";
 import { ChecklistTemplate, AuditLog, ChecklistStatus } from "@/types/checklist";
@@ -201,81 +202,10 @@ export default function ChecklistsPage() {
 
         {/* KPIs de Status */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-          <div
-            className="p-4 flex items-center justify-between"
-            style={{
-              backgroundColor: "var(--surface-card)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <div>
-              <p className="text-xs uppercase font-medium" style={{ color: "var(--text-muted)" }}>
-                Total de Templates
-              </p>
-              <p className="text-2xl font-bold mt-1" style={{ color: "var(--text-primary)" }}>
-                {templates.length}
-              </p>
-            </div>
-            <FileText size={20} style={{ color: "var(--text-muted)" }} />
-          </div>
-
-          <div
-            className="p-4 flex items-center justify-between"
-            style={{
-              backgroundColor: "var(--surface-card)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <div>
-              <p className="text-xs uppercase font-medium" style={{ color: "var(--text-muted)" }}>
-                Rascunhos (Drafts)
-              </p>
-              <p className="text-2xl font-bold mt-1" style={{ color: "var(--nexus-blue-600)" }}>
-                {draftCount}
-              </p>
-            </div>
-            <Edit size={20} style={{ color: "var(--nexus-blue-600)" }} />
-          </div>
-
-          <div
-            className="p-4 flex items-center justify-between"
-            style={{
-              backgroundColor: "var(--surface-card)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <div>
-              <p className="text-xs uppercase font-medium" style={{ color: "var(--text-muted)" }}>
-                Publicados (Mobile)
-              </p>
-              <p className="text-2xl font-bold mt-1" style={{ color: "var(--success)" }}>
-                {publishedCount}
-              </p>
-            </div>
-            <CheckCircle2 size={20} style={{ color: "var(--success)" }} />
-          </div>
-
-          <div
-            className="p-4 flex items-center justify-between"
-            style={{
-              backgroundColor: "var(--surface-card)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <div>
-              <p className="text-xs uppercase font-medium" style={{ color: "var(--text-muted)" }}>
-                Arquivados
-              </p>
-              <p className="text-2xl font-bold mt-1" style={{ color: "var(--text-muted)" }}>
-                {archivedCount}
-              </p>
-            </div>
-            <Archive size={20} style={{ color: "var(--text-muted)" }} />
-          </div>
+          <KpiCard label="Templates" value={templates.length} context="Todos os contextos" icon={<FileText size={18} />} />
+          <KpiCard label="Rascunhos" value={draftCount} context="Em preparação" status="info" icon={<Edit size={18} />} />
+          <KpiCard label="Publicados" value={publishedCount} context="Disponíveis no mobile" status="success" icon={<CheckCircle2 size={18} />} />
+          <KpiCard label="Arquivados" value={archivedCount} context="Fora de novas execuções" icon={<Archive size={18} />} />
         </div>
 
         {/* Tabela Operacional */}

@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { LogOut } from "@tamagui/lucide-icons-2";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
 import { mockVehicleShift } from "../services/mockMobileData";
 
@@ -62,8 +63,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
         </View>
 
         {/* Botão Sair */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.8}>
-          <Text style={styles.logoutBtnText}>Sair da Conta</Text>
+        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Sair da conta">
+          <LogOut size={18} color={colors.danger.foreground} />
+          <Text style={styles.logoutBtnText}>Sair da conta</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -172,6 +174,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: radius.lg,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
   },
   logoutBtnText: {
     color: colors.danger.foreground,

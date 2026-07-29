@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList } from "react-native";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
+import { Search, Car, CheckCircle2, ChevronRight } from "@tamagui/lucide-icons-2";
 
 export interface VehicleOption {
   id: string;
@@ -82,13 +83,14 @@ export const VehicleSelectorModal: React.FC<VehicleSelectorModalProps> = ({
         <View style={styles.content}>
           {/* Campo de Busca */}
           <View style={styles.searchBox}>
-            <Text style={{ fontSize: 14 }}>🔍</Text>
+            <Search size={18} color={colors.text.secondary} />
             <TextInput
               style={styles.searchInput}
               placeholder="Buscar por placa ou ID..."
               placeholderTextColor={colors.text.muted}
               value={search}
               onChangeText={setSearch}
+              accessibilityLabel="Buscar veículo por placa, modelo ou identificação"
             />
           </View>
 
@@ -110,7 +112,7 @@ export const VehicleSelectorModal: React.FC<VehicleSelectorModalProps> = ({
                   <View style={styles.cardHeader}>
                     <View style={styles.vehicleInfoGroup}>
                       <View style={[styles.vehicleIconBox, isSelected && styles.vehicleIconBoxSelected]}>
-                        <Text style={{ fontSize: 18 }}>🚗</Text>
+                        <Car size={18} color={isSelected ? colors.text.inverse : colors.blue[600]} />
                       </View>
                       <View>
                         <Text style={styles.plateText}>{item.plate}</Text>
@@ -122,7 +124,7 @@ export const VehicleSelectorModal: React.FC<VehicleSelectorModalProps> = ({
 
                     {isSelected && (
                       <View style={styles.checkBadge}>
-                        <Text style={styles.checkBadgeText}>✓</Text>
+                        <CheckCircle2 size={18} color={colors.text.inverse} />
                       </View>
                     )}
                   </View>
@@ -147,7 +149,7 @@ export const VehicleSelectorModal: React.FC<VehicleSelectorModalProps> = ({
 
           {/* Botão Fixo de Confirmação */}
           <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm} activeOpacity={0.85}>
-            <Text style={styles.confirmBtnText}>Confirmar Veículo ➔</Text>
+            <Text style={styles.confirmBtnText}>Confirmar veículo</Text><ChevronRight size={18} color={colors.text.inverse} />
           </TouchableOpacity>
         </View>
       </View>
@@ -291,6 +293,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     paddingVertical: 14,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 52,
     marginTop: "auto",
     ...shadow.md,
   },

@@ -10,10 +10,12 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { XStack, Button } from "tamagui";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
 import { getResponsivePaddingTop, getResponsivePaddingBottom } from "../theme/responsive";
 import { Inspection, ChecklistAnswerValue, EvidencePhoto, ChecklistQuestion } from "../types";
 import { OfflineStorage } from "../services/offline/storage";
+import { SyncOrchestrator } from "../services/offline/syncQueue";
 
 interface InspectionDetailScreenProps {
   inspection: Inspection;
@@ -77,6 +79,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       };
 
       const savedItem = await OfflineStorage.enqueueSyncItem("INSPECTION", payload);
+      void SyncOrchestrator.triggerSyncWorker();
       
       setSaving(false);
       onSaveSuccess(savedItem.id);
@@ -215,38 +218,44 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                       )}
                     </View>
 
-                    {/* Botões de Ação: [ Sim ] e [ Não ] e [ Sem Resposta ] */}
-                    <View style={styles.actionButtonsRow}>
-                      <TouchableOpacity
-                        style={[styles.nokBtn, isSelectedNok && styles.nokBtnActive]}
+                    {/* Botões de Ação: [ Não ] e [ Sim ] e [ Sem Resposta ] */}
+                    <XStack gap="$2" mt="$4" jc="space-between" width="100%">
+                      <Button
+                        f={1}
+                        size="$3"
+                        bg={isSelectedNok ? colors.danger.soft : colors.surface.muted}
+                        borderColor={isSelectedNok ? colors.danger.DEFAULT : "transparent"}
+                        borderWidth={isSelectedNok ? 1 : 0}
+                        color={isSelectedNok ? colors.danger.foreground : colors.text.primary}
                         onPress={() => handleSelectAnswer(q.id, "NAO_CONFORME")}
-                        activeOpacity={0.8}
                       >
-                        <Text style={[styles.nokBtnText, isSelectedNok && styles.nokBtnTextActive]}>
-                          Não
-                        </Text>
-                      </TouchableOpacity>
+                        Não conforme
+                      </Button>
 
-                      <TouchableOpacity
-                        style={[styles.okBtn, isSelectedOk && styles.okBtnActive]}
+                      <Button
+                        f={1}
+                        size="$3"
+                        bg={isSelectedOk ? colors.success.soft : colors.surface.muted}
+                        borderColor={isSelectedOk ? colors.success.DEFAULT : "transparent"}
+                        borderWidth={isSelectedOk ? 1 : 0}
+                        color={isSelectedOk ? colors.success.foreground : colors.text.primary}
                         onPress={() => handleSelectAnswer(q.id, "CONFORME")}
-                        activeOpacity={0.8}
                       >
-                        <Text style={[styles.okBtnText, isSelectedOk && styles.okBtnTextActive]}>
-                          Sim
-                        </Text>
-                      </TouchableOpacity>
+                        Conforme
+                      </Button>
 
-                      <TouchableOpacity
-                        style={[styles.naBtn, currentAnswer === "NA" && styles.naBtnActive]}
+                      <Button
+                        f={1.2}
+                        size="$3"
+                        bg={currentAnswer === "NA" ? colors.warning.soft : colors.surface.muted}
+                        borderColor={currentAnswer === "NA" ? colors.warning.DEFAULT : "transparent"}
+                        borderWidth={currentAnswer === "NA" ? 1 : 0}
+                        color={currentAnswer === "NA" ? colors.warning.foreground : colors.text.primary}
                         onPress={() => handleSelectAnswer(q.id, "NA")}
-                        activeOpacity={0.8}
                       >
-                        <Text style={[styles.naBtnText, currentAnswer === "NA" && styles.naBtnTextActive]}>
-                          Sem Resposta
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                        Não se aplica
+                      </Button>
+                    </XStack>
 
                     {/* Alerta de NC se marcado Não */}
                     {isSelectedNok && (
@@ -318,6 +327,8 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
           onPress={handleSaveInspection}
           disabled={saving}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={isComplete ? "Concluir e salvar inspeção" : `Salvar checklist com ${pendingCount} itens pendentes`}
         >
           {saving ? (
             <ActivityIndicator color={colors.text.inverse} size="small" />

@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { Car, UserRound } from "@tamagui/lucide-icons-2";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
 import { mockVehicleShift } from "../services/mockMobileData";
 
@@ -14,7 +15,7 @@ export const HistoryScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.historyCard}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardType}>🚗 VISTORIA DE SAÍDA — FROTA</Text>
+            <View style={styles.typeRow}><Car size={15} color={colors.blue[600]} /><Text style={styles.cardType}>VISTORIA DE SAÍDA · FROTA</Text></View>
             <View style={styles.syncedBadge}>
               <Text style={styles.syncedBadgeText}>SINCRONIZADO</Text>
             </View>
@@ -26,7 +27,7 @@ export const HistoryScreen: React.FC = () => {
 
         <View style={styles.historyCard}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardType}>👤 INDIVIDUAL — CERTIFICAÇÃO</Text>
+            <View style={styles.typeRow}><UserRound size={15} color={colors.blue[600]} /><Text style={styles.cardType}>INDIVIDUAL · CERTIFICAÇÃO</Text></View>
             <View style={styles.syncedBadge}>
               <Text style={styles.syncedBadgeText}>SINCRONIZADO</Text>
             </View>
@@ -79,9 +80,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
+  typeRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   cardType: {
     color: colors.blue[600],
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   syncedBadge: {
@@ -92,7 +94,7 @@ const styles = StyleSheet.create({
   },
   syncedBadgeText: {
     color: colors.success.foreground,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   cardTitle: {

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
+import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, Platform } from "react-native";
-import { colors, radius } from "./src/theme/tokens";
+import { Home, ClipboardList, ListChecks, History, User } from "@tamagui/lucide-icons-2";
+import { colors, control, radius } from "./src/theme/tokens";
 import { getResponsivePaddingBottom } from "./src/theme/responsive";
 import { MobileTabName, ContextualChecklist, Inspection } from "./src/types";
 import { LoginScreen } from "./src/screens/LoginScreen";
@@ -13,6 +15,10 @@ import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { InspectionDetailScreen } from "./src/screens/InspectionDetailScreen";
 import { SyncQueueScreen } from "./src/screens/SyncQueueScreen";
 import { OfflineStorage } from "./src/services/offline/storage";
+import { SyncOrchestrator } from "./src/services/offline/syncQueue";
+
+import { TamaguiProvider } from 'tamagui'
+import tamaguiConfig from './tamagui.config'
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -25,13 +31,22 @@ export default function App() {
 
   const updatePendingSyncCount = async () => {
     const queue = await OfflineStorage.getSyncQueue();
-    const pending = queue.filter((i) => i.status === "PENDING").length;
+    const pending = queue.filter((i) => i.status !== "SYNCED").length;
     setPendingSyncCount(pending);
   };
 
   useEffect(() => {
     updatePendingSyncCount();
   }, [activeTab, isExecutingChecklist, isSyncQueueOpen]);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((networkState) => {
+      if (networkState.isConnected && networkState.isInternetReachable !== false) {
+        void SyncOrchestrator.triggerSyncWorker().then(updatePendingSyncCount);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   const handleLoginSuccess = () => {
     setIsLoggedIn(true);
@@ -69,104 +84,106 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" backgroundColor={colors.navy[900]} translucent={true} />
+    <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" backgroundColor={colors.navy[900]} translucent={true} />
 
-      {/* Roteamento Principal */}
-      <View style={styles.screenContainer}>
-        {!isLoggedIn ? (
-          <LoginScreen onLoginSuccess={handleLoginSuccess} />
-        ) : isExecutingChecklist && selectedChecklist ? (
-          <InspectionDetailScreen
-            inspection={getAdaptedInspectionData()!}
-            onBack={() => setIsExecutingChecklist(false)}
-            onSaveSuccess={handleSaveSuccess}
-          />
-        ) : isSyncQueueOpen ? (
-          <SyncQueueScreen
-            highlightItemId={highlightSyncId}
-            onBack={() => setIsSyncQueueOpen(false)}
-          />
-        ) : (
-          <>
-            {activeTab === "HOME" && (
-              <HomeScreen
-                onNavigateTab={(tab) => setActiveTab(tab)}
-                onOpenChecklist={(id) => {
-                  /* Callback */
-                }}
-              />
-            )}
+        {/* Roteamento Principal */}
+        <View style={styles.screenContainer}>
+          {!isLoggedIn ? (
+            <LoginScreen onLoginSuccess={handleLoginSuccess} />
+          ) : isExecutingChecklist && selectedChecklist ? (
+            <InspectionDetailScreen
+              inspection={getAdaptedInspectionData()!}
+              onBack={() => setIsExecutingChecklist(false)}
+              onSaveSuccess={handleSaveSuccess}
+            />
+          ) : isSyncQueueOpen ? (
+            <SyncQueueScreen
+              highlightItemId={highlightSyncId}
+              onBack={() => setIsSyncQueueOpen(false)}
+            />
+          ) : (
+            <>
+              {activeTab === "HOME" && (
+                <HomeScreen
+                  onNavigateTab={(tab) => setActiveTab(tab)}
+                  onOpenChecklist={(id) => {
+                    /* Callback */
+                  }}
+                />
+              )}
 
-            {activeTab === "MY_TASKS" && (
-              <MyTasksScreen onOpenChecklist={handleOpenChecklist} />
-            )}
+              {activeTab === "MY_TASKS" && (
+                <MyTasksScreen onOpenChecklist={handleOpenChecklist} />
+              )}
 
-            {activeTab === "ALL_CHECKLISTS" && (
-              <AllChecklistsScreen onOpenChecklist={handleOpenChecklist} />
-            )}
+              {activeTab === "ALL_CHECKLISTS" && (
+                <AllChecklistsScreen onOpenChecklist={handleOpenChecklist} />
+              )}
 
-            {activeTab === "HISTORY" && <HistoryScreen />}
+              {activeTab === "HISTORY" && <HistoryScreen />}
 
-            {activeTab === "PROFILE" && (
-              <ProfileScreen onLogout={() => setIsLoggedIn(false)} />
-            )}
-          </>
-        )}
-      </View>
-
-      {/* Tab Bar Inferior com Responsividade Impecável */}
-      {isLoggedIn && !isExecutingChecklist && !isSyncQueueOpen && (
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === "HOME" && styles.tabItemActive]}
-            onPress={() => setActiveTab("HOME")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabIcon, activeTab === "HOME" && styles.tabIconActive]}>🏠</Text>
-            <Text style={[styles.tabText, activeTab === "HOME" && styles.tabTextActive]} numberOfLines={1}>Início</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === "MY_TASKS" && styles.tabItemActive]}
-            onPress={() => setActiveTab("MY_TASKS")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabIcon, activeTab === "MY_TASKS" && styles.tabIconActive]}>📋</Text>
-            <Text style={[styles.tabText, activeTab === "MY_TASKS" && styles.tabTextActive]} numberOfLines={1}>Tarefas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === "ALL_CHECKLISTS" && styles.tabItemActive]}
-            onPress={() => setActiveTab("ALL_CHECKLISTS")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabIcon, activeTab === "ALL_CHECKLISTS" && styles.tabIconActive]}>📚</Text>
-            <Text style={[styles.tabText, activeTab === "ALL_CHECKLISTS" && styles.tabTextActive]} numberOfLines={1}>
-              Todos {pendingSyncCount > 0 ? `(${pendingSyncCount})` : ""}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === "HISTORY" && styles.tabItemActive]}
-            onPress={() => setActiveTab("HISTORY")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabIcon, activeTab === "HISTORY" && styles.tabIconActive]}>🕒</Text>
-            <Text style={[styles.tabText, activeTab === "HISTORY" && styles.tabTextActive]} numberOfLines={1}>Histórico</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === "PROFILE" && styles.tabItemActive]}
-            onPress={() => setActiveTab("PROFILE")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabIcon, activeTab === "PROFILE" && styles.tabIconActive]}>👤</Text>
-            <Text style={[styles.tabText, activeTab === "PROFILE" && styles.tabTextActive]} numberOfLines={1}>Perfil</Text>
-          </TouchableOpacity>
+              {activeTab === "PROFILE" && (
+                <ProfileScreen onLogout={() => setIsLoggedIn(false)} />
+              )}
+            </>
+          )}
         </View>
-      )}
-    </SafeAreaView>
+
+        {/* Tab Bar Inferior com Responsividade Impecável */}
+        {isLoggedIn && !isExecutingChecklist && !isSyncQueueOpen && (
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tabItem, activeTab === "HOME" && styles.tabItemActive]}
+              onPress={() => setActiveTab("HOME")}
+              activeOpacity={0.7}
+            >
+              <Home size={20} color={activeTab === "HOME" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
+              <Text style={[styles.tabText, activeTab === "HOME" && styles.tabTextActive]} numberOfLines={1}>Início</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabItem, activeTab === "MY_TASKS" && styles.tabItemActive]}
+              onPress={() => setActiveTab("MY_TASKS")}
+              activeOpacity={0.7}
+            >
+              <ClipboardList size={20} color={activeTab === "MY_TASKS" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
+              <Text style={[styles.tabText, activeTab === "MY_TASKS" && styles.tabTextActive]} numberOfLines={1}>Tarefas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabItem, activeTab === "ALL_CHECKLISTS" && styles.tabItemActive]}
+              onPress={() => setActiveTab("ALL_CHECKLISTS")}
+              activeOpacity={0.7}
+            >
+              <ListChecks size={20} color={activeTab === "ALL_CHECKLISTS" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
+              <Text style={[styles.tabText, activeTab === "ALL_CHECKLISTS" && styles.tabTextActive]} numberOfLines={1}>
+                Checklists {pendingSyncCount > 0 ? `(${pendingSyncCount})` : ""}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabItem, activeTab === "HISTORY" && styles.tabItemActive]}
+              onPress={() => setActiveTab("HISTORY")}
+              activeOpacity={0.7}
+            >
+              <History size={20} color={activeTab === "HISTORY" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
+              <Text style={[styles.tabText, activeTab === "HISTORY" && styles.tabTextActive]} numberOfLines={1}>Histórico</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabItem, activeTab === "PROFILE" && styles.tabItemActive]}
+              onPress={() => setActiveTab("PROFILE")}
+              activeOpacity={0.7}
+            >
+              <User size={20} color={activeTab === "PROFILE" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
+              <Text style={[styles.tabText, activeTab === "PROFILE" && styles.tabTextActive]} numberOfLines={1}>Perfil</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </SafeAreaView>
+    </TamaguiProvider>
   );
 }
 
@@ -193,19 +210,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 4,
+    minHeight: control.minTouchTarget,
+    paddingVertical: 6,
     borderRadius: radius.md,
   },
   tabItemActive: {
     backgroundColor: "rgba(0, 184, 230, 0.18)",
-  },
-  tabIcon: {
-    fontSize: 16,
-    marginBottom: 2,
-    opacity: 0.7,
-  },
-  tabIconActive: {
-    opacity: 1,
   },
   tabText: {
     color: "rgba(214, 224, 239, 0.7)",

@@ -1,5 +1,5 @@
 # ==========================================
-# NexusOps Web - Next.js 14 Dockerfile
+# NexusOps Web - Next.js 15 Dockerfile
 # ==========================================
 FROM node:20-alpine AS base
 
@@ -18,7 +18,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_API_URL=/api/v1
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-RUN npm run build
+RUN mkdir -p public && npm run build
 
 # 3. Execução
 FROM base AS runner

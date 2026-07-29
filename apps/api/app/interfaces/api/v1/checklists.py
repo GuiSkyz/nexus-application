@@ -1,183 +1,328 @@
-from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+# ruff: noqa: N815
+
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.infrastructure.database.models.checklist_model import (
+    ChecklistQuestionModel,
+    ChecklistSectionModel,
+    ChecklistTemplateModel,
+)
+from app.infrastructure.database.session import get_db
 
 router = APIRouter(prefix="/checklists", tags=["Templates de Checklist"])
 
 
-class ChecklistQuestionResponse(BaseModel):
-    id: str
-    category: str
-    questionText: str
+class QuestionPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str | None = None
+    text: str = Field(min_length=3)
     type: str = "yes_no"
     isRequired: bool = True
     requirePhoto: bool = False
     requireJustification: bool = False
+    order: int = 1
 
 
-class ChecklistSectionResponse(BaseModel):
+class SectionPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str | None = None
+    title: str = Field(min_length=2)
+    description: str | None = None
+    order: int = 1
+    questions: list[QuestionPayload] = Field(default_factory=list)
+
+
+class ChecklistPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: str = Field(min_length=3, max_length=255)
+    category: str = Field(min_length=2, max_length=100)
+    description: str | None = None
+    createdBy: str = "Coordenação Operacional"
+    sections: list[SectionPayload] = Field(default_factory=list)
+
+
+class QuestionResponse(QuestionPayload):
     id: str
-    title: str
-    description: Optional[str] = None
-    questions: List[ChecklistQuestionResponse] = []
 
 
-class ChecklistTemplateResponse(BaseModel):
+class SectionResponse(SectionPayload):
     id: str
-    templateFamilyId: str
+    questions: list[QuestionResponse]
+
+
+class ChecklistResponse(BaseModel):
+    id: str
+    templateId: str
     title: str
     category: str
-    description: Optional[str] = None
-    status: str  # draft, published, archived
+    description: str | None
+    status: str
     version: int
     isLatestVersion: bool
-    createdAt: str
     createdBy: str
-    publishedAt: Optional[str] = None
-    archivedAt: Optional[str] = None
-    usageCount: int = 0
-    sections: List[ChecklistSectionResponse] = []
+    createdAt: str
+    updatedAt: str
+    publishedAt: str | None = None
+    archivedAt: str | None = None
+    usageCount: int
+    sections: list[SectionResponse]
 
 
-class CreateChecklistRequest(BaseModel):
-    title: str
-    category: str
-    description: Optional[str] = None
-    sections: List[Dict[str, Any]] = []
-
-
-# Store em memória para testes do backend
-mock_checklists_db = [
-  {
-    "id": "chk-001",
-    "templateFamilyId": "tpl-101",
-    "title": "Vistoria Diária de Saída — Veículos da Frota",
-    "category": "Veículos & Transportes",
-    "description": "Checklist obrigatório de pré-uso para caminhonetes e carros operacionais da frota.",
-    "status": "published",
-    "version": 1,
-    "isLatestVersion": True,
-    "createdAt": "2026-07-01T08:00:00Z",
-    "createdBy": "Roberto Alcantara (Coordenador)",
-    "publishedAt": "2026-07-02T10:30:00Z",
-    "usageCount": 142,
-    "sections": [
-      {
-        "id": "sec-01",
-        "title": "Segurança & Documentação do Veículo",
-        "description": "Itens obrigatórios de rodagem",
-        "questions": [
-          {
-            "id": "q-101",
-            "category": "Documentação",
-            "questionText": "CRLV atualizado e seguro obrigatório estão presentes no porta-luvas?",
-            "type": "yes_no_na",
-            "isRequired": True,
-            "requirePhoto": False,
-            "requireJustification": True,
-          },
-          {
-            "id": "q-102",
-            "category": "Equipamentos Obrigatórios",
-            "questionText": "Triângulo de sinalização, macaco hidráulico e chave de roda operacionais?",
-            "type": "yes_no",
-            "isRequired": True,
-            "requirePhoto": True,
-            "requireJustification": False,
-          },
+def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
+    updated = template.updated_at.isoformat()
+    return ChecklistResponse(
+        id=template.id,
+        templateId=template.template_family_id,
+        title=template.title,
+        category=template.category,
+        description=template.description,
+        status=template.status,
+        version=template.version,
+        isLatestVersion=template.is_latest_version,
+        createdBy=template.created_by,
+        createdAt=template.created_at.isoformat(),
+        updatedAt=updated,
+        publishedAt=updated if template.status == "published" else None,
+        archivedAt=updated if template.status == "archived" else None,
+        usageCount=template.usage_count,
+        sections=[
+            SectionResponse(
+                id=section.id,
+                title=section.title,
+                description=section.description,
+                order=section.order,
+                questions=[
+                    QuestionResponse(
+                        id=question.id,
+                        text=question.question_text,
+                        type=question.type,
+                        isRequired=question.is_required,
+                        requirePhoto=question.require_photo,
+                        requireJustification=question.require_justification,
+                        order=question.order,
+                    )
+                    for question in section.questions
+                ],
+            )
+            for section in template.sections
         ],
-      }
-    ],
-  },
-  {
-    "id": "chk-002",
-    "templateFamilyId": "tpl-102",
-    "title": "Inspeção de Segurança em Altura (NR-35)",
-    "category": "Segurança do Trabalho",
-    "description": "Verificação rigorosa de cinto paraquedista, talabarte, trava-quedas e ancoragem.",
-    "status": "published",
-    "version": 1,
-    "isLatestVersion": True,
-    "createdAt": "2026-07-10T14:00:00Z",
-    "createdBy": "Roberto Alcantara (Coordenador)",
-    "publishedAt": "2026-07-11T09:00:00Z",
-    "usageCount": 89,
-    "sections": [],
-  },
-  {
-    "id": "chk-003",
-    "templateFamilyId": "tpl-103",
-    "title": "Manutenção Preventiva de Máquinas e Ferramentas",
-    "category": "Manutenção Operacional",
-    "description": "Rascunho inicial para vistoria técnica de máquinas de fusão óptica.",
-    "status": "draft",
-    "version": 1,
-    "isLatestVersion": True,
-    "createdAt": "2026-07-20T16:45:00Z",
-    "createdBy": "Roberto Alcantara (Coordenador)",
-    "usageCount": 0,
-    "sections": [],
-  },
-]
+    )
 
 
-@router.get("", response_model=List[ChecklistTemplateResponse], summary="Listagem de templates de checklist")
-async def list_checklists(status: Optional[str] = None) -> Any:
-    if status:
-        return [c for c in mock_checklists_db if c["status"] == status]
-    return mock_checklists_db
+def _apply_sections(
+    template: ChecklistTemplateModel, sections: list[SectionPayload]
+) -> None:
+    template.sections.clear()
+    for section_data in sections:
+        section = ChecklistSectionModel(
+            title=section_data.title.strip(),
+            description=section_data.description,
+            order=section_data.order,
+        )
+        section.questions = [
+            ChecklistQuestionModel(
+                question_text=question.text.strip(),
+                type=question.type,
+                is_required=question.isRequired,
+                require_photo=question.requirePhoto,
+                require_justification=question.requireJustification,
+                order=question.order,
+            )
+            for question in section_data.questions
+        ]
+        template.sections.append(section)
 
 
-@router.post("", response_model=ChecklistTemplateResponse, status_code=status.HTTP_201_CREATED, summary="Criação de rascunho de checklist")
-async def create_checklist(req: CreateChecklistRequest) -> Any:
-    new_chk = {
-        "id": f"chk-00{len(mock_checklists_db) + 1}",
-        "templateFamilyId": f"tpl-{200 + len(mock_checklists_db)}",
-        "title": req.title,
-        "category": req.category,
-        "description": req.description,
-        "status": "draft",
-        "version": 1,
-        "isLatestVersion": True,
-        "createdAt": "2026-07-23T16:00:00Z",
-        "createdBy": "Coordenador Técnico",
-        "usageCount": 0,
-        "sections": req.sections,
-    }
-    mock_checklists_db.append(new_chk)
-    return new_chk
+def _statement():
+    return select(ChecklistTemplateModel).options(
+        selectinload(ChecklistTemplateModel.sections).selectinload(
+            ChecklistSectionModel.questions
+        )
+    )
 
 
-@router.post("/{checklist_id}/publish", response_model=ChecklistTemplateResponse, summary="Publicação de checklist")
-async def publish_checklist(checklist_id: str) -> Any:
-    for c in mock_checklists_db:
-        if c["id"] == checklist_id:
-            c["status"] = "published"
-            c["publishedAt"] = "2026-07-23T16:30:00Z"
-            return c
-    raise HTTPException(status_code=404, detail="Template de checklist não encontrado.")
+@router.get("", response_model=list[ChecklistResponse])
+async def list_checklists(
+    checklist_status: str | None = Query(default=None, alias="status"),
+    session: AsyncSession = Depends(get_db),
+) -> list[ChecklistResponse]:
+    statement = _statement().order_by(ChecklistTemplateModel.updated_at.desc())
+    if checklist_status:
+        statement = statement.where(ChecklistTemplateModel.status == checklist_status)
+    result = await session.execute(statement)
+    return [_response(item) for item in result.scalars().unique().all()]
 
 
-@router.post("/{checklist_id}/archive", response_model=ChecklistTemplateResponse, summary="Arquivamento de checklist")
-async def archive_checklist(checklist_id: str) -> Any:
-    for c in mock_checklists_db:
-        if c["id"] == checklist_id:
-            c["status"] = "archived"
-            c["archivedAt"] = "2026-07-23T16:35:00Z"
-            return c
-    raise HTTPException(status_code=404, detail="Template de checklist não encontrado.")
+@router.get("/{checklist_id}", response_model=ChecklistResponse)
+async def get_checklist(
+    checklist_id: str, session: AsyncSession = Depends(get_db)
+) -> ChecklistResponse:
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    return _response(template)
 
 
-@router.delete("/{checklist_id}", summary="Exclusão de checklist")
-async def delete_checklist(checklist_id: str) -> Any:
-    global mock_checklists_db
-    for c in mock_checklists_db:
-        if c["id"] == checklist_id:
-            if c["status"] == "published" or c["usageCount"] > 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Regra RBAC: Checklists já publicados ou com histórico de uso não podem ser excluídos definitivamente.",
-                )
-            mock_checklists_db = [item for item in mock_checklists_db if item["id"] != checklist_id]
-            return {"message": "Checklist excluído com sucesso."}
-    raise HTTPException(status_code=404, detail="Template de checklist não encontrado.")
+@router.post("", response_model=ChecklistResponse, status_code=status.HTTP_201_CREATED)
+async def create_checklist(
+    payload: ChecklistPayload, session: AsyncSession = Depends(get_db)
+) -> ChecklistResponse:
+    template = ChecklistTemplateModel(
+        template_family_id=f"tpl-{uuid4().hex[:8]}",
+        title=payload.title.strip(),
+        category=payload.category.strip(),
+        description=payload.description,
+        status="draft",
+        version=1,
+        is_latest_version=True,
+        created_by=payload.createdBy,
+        usage_count=0,
+    )
+    _apply_sections(template, payload.sections)
+    session.add(template)
+    await session.commit()
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == template.id)
+    )
+    return _response(result.scalar_one())
+
+
+@router.put("/{checklist_id}", response_model=ChecklistResponse)
+async def update_checklist(
+    checklist_id: str,
+    payload: ChecklistPayload,
+    session: AsyncSession = Depends(get_db),
+) -> ChecklistResponse:
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    if template.status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail="Somente rascunhos podem ser editados. Crie uma nova versão.",
+        )
+    template.title = payload.title.strip()
+    template.category = payload.category.strip()
+    template.description = payload.description
+    _apply_sections(template, payload.sections)
+    await session.commit()
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    return _response(result.scalar_one())
+
+
+@router.post("/{checklist_id}/publish", response_model=ChecklistResponse)
+async def publish_checklist(
+    checklist_id: str, session: AsyncSession = Depends(get_db)
+) -> ChecklistResponse:
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    if not template.sections or not any(s.questions for s in template.sections):
+        raise HTTPException(
+            status_code=422,
+            detail="Inclua ao menos uma pergunta antes de publicar.",
+        )
+    template.status = "published"
+    await session.commit()
+    await session.refresh(template)
+    return _response(template)
+
+
+@router.post("/{checklist_id}/archive", response_model=ChecklistResponse)
+async def archive_checklist(
+    checklist_id: str, session: AsyncSession = Depends(get_db)
+) -> ChecklistResponse:
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    template.status = "archived"
+    await session.commit()
+    await session.refresh(template)
+    return _response(template)
+
+
+@router.post("/{checklist_id}/duplicate", response_model=ChecklistResponse)
+async def duplicate_checklist(
+    checklist_id: str, session: AsyncSession = Depends(get_db)
+) -> ChecklistResponse:
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    source = result.scalar_one_or_none()
+    if not source:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    clone = ChecklistTemplateModel(
+        template_family_id=f"tpl-{uuid4().hex[:8]}",
+        title=f"Cópia de {source.title}",
+        category=source.category,
+        description=source.description,
+        status="draft",
+        version=1,
+        is_latest_version=True,
+        created_by=source.created_by,
+        usage_count=0,
+    )
+    _apply_sections(
+        clone,
+        [
+            SectionPayload(
+                title=section.title,
+                description=section.description,
+                order=section.order,
+                questions=[
+                    QuestionPayload(
+                        text=question.question_text,
+                        type=question.type,
+                        isRequired=question.is_required,
+                        requirePhoto=question.require_photo,
+                        requireJustification=question.require_justification,
+                        order=question.order,
+                    )
+                    for question in section.questions
+                ],
+            )
+            for section in source.sections
+        ],
+    )
+    session.add(clone)
+    await session.commit()
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == clone.id)
+    )
+    return _response(result.scalar_one())
+
+
+@router.delete("/{checklist_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_checklist(
+    checklist_id: str, session: AsyncSession = Depends(get_db)
+) -> None:
+    template = await session.get(ChecklistTemplateModel, checklist_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    if template.status == "published" or template.usage_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Checklists publicados ou utilizados devem ser arquivados.",
+        )
+    await session.delete(template)
+    await session.commit()

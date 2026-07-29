@@ -1,17 +1,18 @@
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+# ruff: noqa: N815
 
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.infrastructure.database.models.incident_model import ActionPlanModel, IncidentModel
 from app.infrastructure.database.session import get_db
 
-router = APIRouter(prefix="/incidents", tags=["Não Conformidades & Planos de Ação"])
+router = APIRouter(prefix="/incidents", tags=["Não Conformidades e Planos de Ação"])
 
 
 class ActionPlanResponse(BaseModel):
@@ -22,17 +23,17 @@ class ActionPlanResponse(BaseModel):
     dueDate: str
     createdAt: str
     createdBy: str
-    resolvedAt: Optional[str] = None
-    resolutionNotes: Optional[str] = None
+    resolvedAt: str | None = None
+    resolutionNotes: str | None = None
 
 
 class IncidentResponse(BaseModel):
     id: str
-    inspectionId: Optional[str] = None
+    inspectionId: str | None = None
     inspectionTitle: str
     contextType: str
-    vehiclePlate: Optional[str] = None
-    vehicleModel: Optional[str] = None
+    vehiclePlate: str | None = None
+    vehicleModel: str | None = None
     technicianName: str
     teamName: str
     questionText: str
@@ -40,19 +41,34 @@ class IncidentResponse(BaseModel):
     severity: str
     status: str
     reportedAt: str
-    description: Optional[str] = None
-    actionPlan: Optional[ActionPlanResponse] = None
+    description: str | None = None
+    actionPlan: ActionPlanResponse | None = None
+
+
+class IncidentPayload(BaseModel):
+    inspectionId: str | None = None
+    inspectionTitle: str = Field(min_length=3)
+    contextType: str = "ACTIVITY"
+    vehiclePlate: str | None = None
+    vehicleModel: str | None = None
+    technicianName: str = Field(min_length=3)
+    teamName: str = Field(min_length=2)
+    questionText: str = Field(min_length=3)
+    category: str = Field(min_length=2)
+    severity: str = "MEDIA"
+    status: str = "ABERTA"
+    description: str | None = None
 
 
 class CreateActionPlanRequest(BaseModel):
-    description: str = Field(..., description="Descrição detalhada do plano de ação corretiva")
-    assignedTo: str = Field(..., description="Setor/Pessoa responsável pela execução")
-    dueDate: str = Field(..., description="Data limite para conclusão")
-    createdBy: str = Field(default="Supervisor Operacional")
+    description: str = Field(min_length=3)
+    assignedTo: str = Field(min_length=2)
+    dueDate: str
+    createdBy: str = "Supervisor Operacional"
 
 
 class ResolveIncidentRequest(BaseModel):
-    resolutionNotes: str = Field(..., description="Observações comprovatórias da resolução")
+    resolutionNotes: str = Field(min_length=3)
 
 
 def _action_plan_response(action_plan: ActionPlanModel) -> ActionPlanResponse:
@@ -69,10 +85,12 @@ def _action_plan_response(action_plan: ActionPlanModel) -> ActionPlanResponse:
     )
 
 
-def _incident_response(
-    incident: IncidentModel,
-    action_plan: ActionPlanResponse | None = None,
-) -> IncidentResponse:
+def _incident_response(incident: IncidentModel) -> IncidentResponse:
+    plan = (
+        _action_plan_response(incident.action_plans[0])
+        if incident.action_plans
+        else None
+    )
     return IncidentResponse(
         id=incident.code,
         inspectionId=incident.inspection_id,
@@ -88,98 +106,148 @@ def _incident_response(
         status=incident.status,
         reportedAt=incident.created_at.isoformat(),
         description=incident.description,
-        actionPlan=action_plan,
+        actionPlan=plan,
     )
 
 
-@router.get(
-    "",
-    response_model=List[IncidentResponse],
-    summary="Listagem de Não Conformidades (NC)",
-)
+def _statement():
+    return select(IncidentModel).options(selectinload(IncidentModel.action_plans))
+
+
+@router.get("", response_model=list[IncidentResponse])
 async def list_incidents(
     session: AsyncSession = Depends(get_db),
-    status: Optional[str] = None,
-    severity: Optional[str] = None,
+    status_filter: str | None = None,
+    severity: str | None = None,
 ) -> list[IncidentResponse]:
-    statement = select(IncidentModel).options(selectinload(IncidentModel.action_plans))
-    if status and status != "ALL":
-        statement = statement.where(IncidentModel.status == status)
+    statement = _statement().order_by(IncidentModel.created_at.desc())
+    if status_filter and status_filter != "ALL":
+        statement = statement.where(IncidentModel.status == status_filter)
     if severity and severity != "ALL":
         statement = statement.where(IncidentModel.severity == severity)
-
     result = await session.execute(statement)
-    incidents = result.scalars().all()
-    return [
-        _incident_response(
-            incident,
-            _action_plan_response(incident.action_plans[0])
-            if incident.action_plans
-            else None,
-        )
-        for incident in incidents
-    ]
+    return [_incident_response(item) for item in result.scalars().unique().all()]
 
 
-@router.post(
-    "/{incident_code}/action-plan",
-    response_model=IncidentResponse,
-    summary="Cadastro de Plano de Ação para uma NC",
-)
+@router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
+async def create_incident(
+    request: IncidentPayload, session: AsyncSession = Depends(get_db)
+) -> IncidentResponse:
+    year = datetime.now(UTC).year
+    total = await session.scalar(select(func.count()).select_from(IncidentModel)) or 0
+    incident = IncidentModel(
+        code=f"NC-{year}-{total + 1:04d}",
+        inspection_id=request.inspectionId,
+        inspection_title=request.inspectionTitle,
+        context_type=request.contextType,
+        vehicle_plate=request.vehiclePlate,
+        vehicle_model=request.vehicleModel,
+        technician_name=request.technicianName,
+        team_name=request.teamName,
+        question_text=request.questionText,
+        category=request.category,
+        severity=request.severity,
+        status=request.status,
+        description=request.description,
+    )
+    session.add(incident)
+    await session.commit()
+    result = await session.execute(_statement().where(IncidentModel.id == incident.id))
+    return _incident_response(result.scalar_one())
+
+
+@router.put("/{incident_code}", response_model=IncidentResponse)
+async def update_incident(
+    incident_code: str,
+    request: IncidentPayload,
+    session: AsyncSession = Depends(get_db),
+) -> IncidentResponse:
+    result = await session.execute(
+        _statement().where(IncidentModel.code == incident_code)
+    )
+    incident = result.scalar_one_or_none()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
+    incident.inspection_id = request.inspectionId
+    incident.inspection_title = request.inspectionTitle
+    incident.context_type = request.contextType
+    incident.vehicle_plate = request.vehiclePlate
+    incident.vehicle_model = request.vehicleModel
+    incident.technician_name = request.technicianName
+    incident.team_name = request.teamName
+    incident.question_text = request.questionText
+    incident.category = request.category
+    incident.severity = request.severity
+    incident.status = request.status
+    incident.description = request.description
+    await session.commit()
+    await session.refresh(incident)
+    return _incident_response(incident)
+
+
+@router.delete("/{incident_code}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_incident(
+    incident_code: str, session: AsyncSession = Depends(get_db)
+) -> None:
+    incident = await session.scalar(
+        select(IncidentModel).where(IncidentModel.code == incident_code)
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
+    await session.delete(incident)
+    await session.commit()
+
+
+@router.post("/{incident_code}/action-plan", response_model=IncidentResponse)
 async def create_action_plan(
     incident_code: str,
     request: CreateActionPlanRequest,
     session: AsyncSession = Depends(get_db),
 ) -> IncidentResponse:
     result = await session.execute(
-        select(IncidentModel).where(IncidentModel.code == incident_code)
+        _statement().where(IncidentModel.code == incident_code)
     )
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
-
-    action_plan = ActionPlanModel(
-        id=str(uuid.uuid4()),
-        incident_id=incident.id,
-        description=request.description,
-        assigned_to=request.assignedTo,
-        due_date=request.dueDate,
-        created_by=request.createdBy,
-    )
-    session.add(action_plan)
+    if incident.action_plans:
+        plan = incident.action_plans[0]
+        plan.description = request.description
+        plan.assigned_to = request.assignedTo
+        plan.due_date = request.dueDate
+        plan.created_by = request.createdBy
+    else:
+        incident.action_plans.append(
+            ActionPlanModel(
+                id=str(uuid.uuid4()),
+                description=request.description,
+                assigned_to=request.assignedTo,
+                due_date=request.dueDate,
+                created_by=request.createdBy,
+            )
+        )
     incident.status = "PLANO_DE_ACAO"
     await session.commit()
     await session.refresh(incident)
-    await session.refresh(action_plan)
-
-    return _incident_response(incident, _action_plan_response(action_plan))
+    return _incident_response(incident)
 
 
-@router.post(
-    "/{incident_code}/resolve",
-    response_model=IncidentResponse,
-    summary="Baixa e conclusão da Não Conformidade",
-)
+@router.post("/{incident_code}/resolve", response_model=IncidentResponse)
 async def resolve_incident(
     incident_code: str,
     request: ResolveIncidentRequest,
     session: AsyncSession = Depends(get_db),
 ) -> IncidentResponse:
-    statement = (
-        select(IncidentModel)
-        .options(selectinload(IncidentModel.action_plans))
-        .where(IncidentModel.code == incident_code)
+    result = await session.execute(
+        _statement().where(IncidentModel.code == incident_code)
     )
-    result = await session.execute(statement)
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
-
     incident.status = "RESOLVIDA"
     if incident.action_plans:
-        incident.action_plans[0].resolved_at = datetime.now(timezone.utc).isoformat()
+        incident.action_plans[0].resolved_at = datetime.now(UTC).isoformat()
         incident.action_plans[0].resolution_notes = request.resolutionNotes
-
     await session.commit()
     await session.refresh(incident)
     return _incident_response(incident)

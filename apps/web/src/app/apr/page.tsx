@@ -1,409 +1,90 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock3,
-  FileSignature,
-  LockKeyhole,
-  MapPin,
-  ShieldCheck,
-  X,
-  XCircle,
-} from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Clock, Eye, ShieldCheck, Trash2, XCircle } from "lucide-react";
 
 import { AppHeader } from "@/components/nexus/app-header";
 import { useRole } from "@/components/nexus/role-selector";
-
-type AprStatus = "PENDING_AUTHORIZATION" | "AUTHORIZED" | "REJECTED";
-type RiskLevel = "BAIXO" | "MEDIO" | "ALTO" | "CRITICO";
-
-interface AprRecord {
-  id: string;
-  serviceOrder: string;
-  activity: string;
-  standard: "NR-35" | "NR-10";
-  technician: string;
-  team: string;
-  location: string;
-  plannedStart: string;
-  maximumRisk: RiskLevel;
-  residualRisk: RiskLevel;
-  status: AprStatus;
-  submittedAt: string;
-  authorizedBy?: string;
-  authorizedAt?: string;
-  decisionNotes?: string;
-}
-
-const initialAprs: AprRecord[] = [
-  {
-    id: "APR-2026-184",
-    serviceOrder: "OS-8849",
-    activity: "Instalação FTTH em fachada",
-    standard: "NR-35",
-    technician: "João Souza",
-    team: "Equipe Alfa",
-    location: "Av. Paulista, 1500 · São Paulo/SP",
-    plannedStart: "2026-07-23T15:00:00",
-    maximumRisk: "CRITICO",
-    residualRisk: "ALTO",
-    status: "PENDING_AUTHORIZATION",
-    submittedAt: "2026-07-23T14:26:00",
-  },
-  {
-    id: "APR-2026-181",
-    serviceOrder: "OS-8811",
-    activity: "Manutenção em caixa de distribuição",
-    standard: "NR-10",
-    technician: "Carlos Silva",
-    team: "Equipe Beta",
-    location: "Rua das Flores, 42 · São Paulo/SP",
-    plannedStart: "2026-07-23T13:30:00",
-    maximumRisk: "ALTO",
-    residualRisk: "MEDIO",
-    status: "AUTHORIZED",
-    submittedAt: "2026-07-23T12:54:00",
-    authorizedBy: "Juliana Lima",
-    authorizedAt: "2026-07-23T13:04:00",
-    decisionNotes: "Bloqueio e teste de ausência de tensão confirmados.",
-  },
-  {
-    id: "APR-2026-176",
-    serviceOrder: "OS-8790",
-    activity: "Lançamento de cabo em poste",
-    standard: "NR-35",
-    technician: "Marcos Oliveira",
-    team: "Equipe Gama",
-    location: "Rod. Anhanguera, km 18 · Osasco/SP",
-    plannedStart: "2026-07-23T10:00:00",
-    maximumRisk: "CRITICO",
-    residualRisk: "CRITICO",
-    status: "REJECTED",
-    submittedAt: "2026-07-23T09:18:00",
-    authorizedBy: "Juliana Lima",
-    authorizedAt: "2026-07-23T09:24:00",
-    decisionNotes: "Vento acima do limite operacional. Reprogramar atividade.",
-  },
-];
-
-const riskStyles: Record<RiskLevel, string> = {
-  BAIXO: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  MEDIO: "bg-amber-50 text-amber-800 border-amber-200",
-  ALTO: "bg-orange-50 text-orange-800 border-orange-200",
-  CRITICO: "bg-red-50 text-red-800 border-red-200",
-};
-
-const statusLabels: Record<AprStatus, string> = {
-  PENDING_AUTHORIZATION: "Aguardando autorização",
-  AUTHORIZED: "Autorizada",
-  REJECTED: "Rejeitada",
-};
+import { ApiClient } from "@/lib/apiClient";
+import { AprRecord, AprStatus, RiskLevel } from "@/types/apr";
 
 export default function AprPage() {
-  const { activeRole, activeUser } = useRole();
-  const [aprs, setAprs] = useState(initialAprs);
-  const [selectedApr, setSelectedApr] = useState<AprRecord | null>(null);
-  const [decisionNotes, setDecisionNotes] = useState("");
-  const [signatureConfirmed, setSignatureConfirmed] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<AprStatus | "ALL">("ALL");
+  const { activeUser } = useRole();
+  const [aprs, setAprs] = useState<AprRecord[]>([]);
+  const [selected, setSelected] = useState<AprRecord | null>(null);
+  const [decision, setDecision] = useState<"authorize" | "reject" | null>(null);
+  const [notes, setNotes] = useState("");
+  const [filter, setFilter] = useState<AprStatus | "ALL">("ALL");
+  const [error, setError] = useState("");
 
-  const canAuthorize = ["SUPERVISOR", "COORDENADOR", "DIRETOR", "ADMIN"].includes(
-    activeRole
-  );
-  const filteredAprs = useMemo(
-    () =>
-      statusFilter === "ALL"
-        ? aprs
-        : aprs.filter((apr) => apr.status === statusFilter),
-    [aprs, statusFilter]
-  );
-  const pendingCount = aprs.filter(
-    (apr) => apr.status === "PENDING_AUTHORIZATION"
-  ).length;
-  const authorizedCount = aprs.filter((apr) => apr.status === "AUTHORIZED").length;
-
-  const openDecision = (apr: AprRecord) => {
-    setSelectedApr(apr);
-    setDecisionNotes("");
-    setSignatureConfirmed(false);
-  };
-
-  const decide = (decision: "AUTHORIZED" | "REJECTED") => {
-    if (!selectedApr || !signatureConfirmed || decisionNotes.trim().length < 3) {
-      return;
+  const load = useCallback(async () => {
+    try {
+      setAprs(await ApiClient.fetchAprs());
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Falha ao carregar APRs.");
     }
-    const decidedAt = new Date().toISOString();
-    setAprs((current) =>
-      current.map((apr) =>
-        apr.id === selectedApr.id
-          ? {
-              ...apr,
-              status: decision,
-              authorizedBy: activeUser,
-              authorizedAt: decidedAt,
-              decisionNotes,
-            }
-          : apr
-      )
-    );
-    setSelectedApr(null);
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+  const visible = useMemo(() => filter === "ALL" ? aprs : aprs.filter((item) => item.status === filter), [aprs, filter]);
+
+  const submitDecision = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selected || !decision) return;
+    try {
+      await ApiClient.decideApr(selected.id, decision, activeUser, notes);
+      setDecision(null);
+      setSelected(null);
+      setNotes("");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "A decisão não foi aplicada.");
+    }
   };
 
   return (
     <>
-      <AppHeader pageTitle="APR e autorizações" breadcrumb={["Operacional", "APR"]} />
-      <main className="p-6 space-y-5">
-        <section className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-6 w-6 text-nexus-blue-600" />
-              <h1 className="text-xl font-bold text-text-primary">
-                Liberação de atividades de alto risco
-              </h1>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Valide riscos, controles e assinaturas antes de liberar trabalhos
-              enquadrados nas normas NR-35 e NR-10.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
-            <LockKeyhole className="h-4 w-4" />
-            Sem autorização, o início permanece bloqueado
-          </div>
+      <AppHeader pageTitle="APR" breadcrumb={["Operacional", "Análise Preliminar de Risco"]} />
+      <main className="space-y-5 p-6">
+        <section className="border-b pb-5"><h1 className="text-xl font-bold text-text-primary">Autorizações de atividade</h1><p className="mt-1 text-sm text-text-secondary">Avalie riscos residuais antes de liberar o início do serviço.</p></section>
+        {error && <div role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm font-semibold text-danger-foreground">{error}</div>}
+        <section className="grid gap-3 md:grid-cols-4">
+          <Summary label="Pendentes" value={aprs.filter((item) => item.status === "PENDING_AUTHORIZATION").length} icon={<Clock />} />
+          <Summary label="Autorizadas" value={aprs.filter((item) => item.status === "AUTHORIZED").length} icon={<CheckCircle2 />} />
+          <Summary label="Rejeitadas" value={aprs.filter((item) => item.status === "REJECTED").length} icon={<XCircle />} />
+          <Summary label="Risco alto/crítico" value={aprs.filter((item) => ["ALTO", "CRITICO"].includes(item.maximumResidualRiskLevel)).length} icon={<AlertTriangle />} danger />
         </section>
-
-        <section className="flex flex-wrap items-center gap-x-8 gap-y-3 border-b pb-4">
-          <div>
-            <p className="text-xs text-text-secondary">Pendentes agora</p>
-            <p className="mt-1 text-2xl font-bold text-red-700">{pendingCount}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-secondary">Autorizadas hoje</p>
-            <p className="mt-1 text-2xl font-bold text-emerald-700">{authorizedCount}</p>
-          </div>
-          <div className="min-w-[220px]">
-            <p className="text-xs text-text-secondary">Perfil em operação</p>
-            <p className="mt-1 text-sm font-semibold text-text-primary">{activeUser}</p>
-          </div>
-          {!canAuthorize && (
-            <p className="text-xs font-semibold text-amber-700">
-              Este perfil pode consultar, mas não autorizar.
-            </p>
-          )}
-        </section>
-
-        <section className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-bold text-text-primary">Fila operacional</h2>
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(event.target.value as AprStatus | "ALL")
-            }
-            className="rounded-md border bg-surface-card px-3 py-2 text-xs font-semibold text-text-primary focus:outline-none focus:ring-2 focus:ring-nexus-blue-600"
-          >
-            <option value="ALL">Todos os status</option>
-            <option value="PENDING_AUTHORIZATION">Aguardando autorização</option>
-            <option value="AUTHORIZED">Autorizadas</option>
-            <option value="REJECTED">Rejeitadas</option>
-          </select>
-        </section>
-
-        <section className="overflow-hidden rounded-xl border bg-surface-card">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-xs">
-              <thead className="border-b bg-surface-subtle text-text-secondary">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">APR / Ordem</th>
-                  <th className="px-4 py-3 font-semibold">Atividade</th>
-                  <th className="px-4 py-3 font-semibold">Responsável</th>
-                  <th className="px-4 py-3 font-semibold">Risco</th>
-                  <th className="px-4 py-3 font-semibold">Início previsto</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 text-right font-semibold">Decisão</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredAprs.map((apr) => (
-                  <tr key={apr.id} className="hover:bg-surface-subtle">
-                    <td className="px-4 py-4">
-                      <p className="font-mono font-bold text-nexus-blue-600">{apr.id}</p>
-                      <p className="mt-1 font-semibold text-text-primary">
-                        {apr.serviceOrder} · {apr.standard}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-text-primary">{apr.activity}</p>
-                      <p className="mt-1 flex items-center gap-1 text-text-secondary">
-                        <MapPin className="h-3 w-3" />
-                        {apr.location}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-text-primary">{apr.technician}</p>
-                      <p className="mt-1 text-text-secondary">{apr.team}</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex rounded border px-2 py-1 font-bold ${riskStyles[apr.maximumRisk]}`}
-                      >
-                        {apr.maximumRisk}
-                      </span>
-                      <p className="mt-1 text-[11px] text-text-secondary">
-                        Residual: {apr.residualRisk}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4 text-text-primary">
-                      {new Date(apr.plannedStart).toLocaleString("pt-BR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-4 py-4">
-                      <StatusBadge status={apr.status} />
-                      {apr.authorizedBy && (
-                        <p className="mt-2 max-w-[190px] text-[10px] leading-4 text-text-secondary">
-                          {apr.authorizedBy}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-right">
-                      {apr.status === "PENDING_AUTHORIZATION" ? (
-                        <button
-                          disabled={!canAuthorize}
-                          onClick={() => openDecision(apr)}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-nexus-blue-600 px-3 py-2 font-bold text-white hover:bg-nexus-blue-700 disabled:cursor-not-allowed disabled:opacity-45"
-                        >
-                          <FileSignature className="h-3.5 w-3.5" />
-                          Revisar e decidir
-                        </button>
-                      ) : (
-                        <span className="text-text-secondary">
-                          Decisão registrada
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="flex flex-wrap gap-1 rounded-xl border bg-white p-3">
+          {(["ALL", "PENDING_AUTHORIZATION", "AUTHORIZED", "REJECTED"] as const).map((value) => <button key={value} onClick={() => setFilter(value)} className={`rounded-md px-3 py-2 text-xs font-bold ${filter === value ? "bg-nexus-navy-900 text-white" : "text-text-secondary hover:bg-surface-muted"}`}>{statusLabel(value)}</button>)}
+        </div>
+        <section className="overflow-hidden rounded-xl border bg-white">
+          {visible.length ? <div className="divide-y">{visible.map((apr) => (
+            <article key={apr.id} className="grid gap-3 px-5 py-4 xl:grid-cols-[150px_1fr_180px_150px_auto] xl:items-center">
+              <div><p className="font-mono text-xs font-bold text-nexus-blue-700">{apr.serviceOrderNumber}</p><p className="mt-1 text-[10px] text-text-secondary">{new Date(apr.plannedStart).toLocaleString("pt-BR")}</p></div>
+              <div><h2 className="text-sm font-bold text-text-primary">{apr.activityType.replaceAll("_", " ")} · {apr.location}</h2><p className="mt-1 text-xs text-text-secondary">{apr.technicianName} · {apr.teamName}</p></div>
+              <div><p className="text-xs font-semibold text-text-secondary">Risco residual</p><RiskBadge level={apr.maximumResidualRiskLevel} /></div>
+              <StatusBadge status={apr.status} />
+              <div className="flex justify-end gap-1"><button onClick={() => setSelected(apr)} title="Visualizar" className="rounded p-2 text-text-secondary hover:bg-surface-muted"><Eye className="h-4 w-4" /></button>{apr.status !== "AUTHORIZED" && <button onClick={() => window.confirm("Excluir esta APR?") && void ApiClient.deleteApr(apr.id).then(load)} title="Excluir" className="rounded p-2 text-text-secondary hover:bg-danger-soft hover:text-danger-foreground"><Trash2 className="h-4 w-4" /></button>}</div>
+            </article>
+          ))}</div> : <p className="py-16 text-center text-sm text-text-secondary">Nenhuma APR neste filtro.</p>}
         </section>
       </main>
 
-      {selectedApr && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="apr-decision-title"
-            className="w-full max-w-xl rounded-xl bg-surface-card p-6 shadow-overlay"
-          >
-            <div className="flex items-start justify-between gap-4 border-b pb-4">
-              <div>
-                <h2 id="apr-decision-title" className="text-lg font-bold text-text-primary">
-                  Autorizar início da atividade
-                </h2>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {selectedApr.id} · {selectedApr.serviceOrder}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedApr(null)}
-                className="rounded-md p-2 text-text-secondary hover:bg-surface-muted"
-                aria-label="Fechar"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="my-4 grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-lg bg-surface-subtle p-3">
-                <p className="text-text-secondary">Risco inicial</p>
-                <p className="mt-1 font-bold text-red-700">{selectedApr.maximumRisk}</p>
-              </div>
-              <div className="rounded-lg bg-surface-subtle p-3">
-                <p className="text-text-secondary">Risco após controles</p>
-                <p className="mt-1 font-bold text-amber-700">{selectedApr.residualRisk}</p>
-              </div>
-            </div>
-
-            <label className="block text-xs font-bold text-text-primary">
-              Parecer do supervisor
-              <textarea
-                rows={4}
-                value={decisionNotes}
-                onChange={(event) => setDecisionNotes(event.target.value)}
-                className="mt-2 w-full rounded-lg border bg-surface-page p-3 font-normal leading-5 focus:outline-none focus:ring-2 focus:ring-nexus-blue-600"
-                placeholder="Registre a conferência dos controles ou o motivo da rejeição."
-              />
-            </label>
-
-            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border bg-surface-subtle p-3 text-xs text-text-primary">
-              <input
-                type="checkbox"
-                checked={signatureConfirmed}
-                onChange={(event) => setSignatureConfirmed(event.target.checked)}
-                className="mt-0.5 h-4 w-4"
-              />
-              <span>
-                <b>Assinar decisão como {activeUser}.</b>
-                <span className="mt-1 block text-text-secondary">
-                  O sistema registrará identidade, data, hora e conteúdo do parecer.
-                </span>
-              </span>
-            </label>
-
-            <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-4">
-              <button
-                onClick={() => decide("REJECTED")}
-                disabled={!signatureConfirmed || decisionNotes.trim().length < 3}
-                className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-45"
-              >
-                <XCircle className="h-4 w-4" />
-                Rejeitar e bloquear
-              </button>
-              <button
-                onClick={() => decide("AUTHORIZED")}
-                disabled={!signatureConfirmed || decisionNotes.trim().length < 3}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-45"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Autorizar atividade
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
+      {selected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-6 shadow-overlay">
+        <div className="flex items-start justify-between"><div><h2 className="text-lg font-bold">{selected.serviceOrderNumber} · {selected.activityType}</h2><p className="mt-1 text-sm text-text-secondary">{selected.location}</p></div><button onClick={() => { setSelected(null); setDecision(null); }} className="rounded p-2 text-text-secondary">Fechar</button></div>
+        <dl className="mt-5 grid gap-3 rounded-lg bg-surface-subtle p-4 md:grid-cols-3"><Info label="Técnico" value={selected.technicianName} /><Info label="Equipe" value={selected.teamName} /><Info label="Contato de emergência" value={selected.emergencyContact} /><Info label="Condição climática" value={selected.weatherConditions} /><Info label="EPIs" value={selected.requiredPpe.join(", ")} /><Info label="Início previsto" value={new Date(selected.plannedStart).toLocaleString("pt-BR")} /></dl>
+        <h3 className="mt-6 text-sm font-bold">Matriz de riscos</h3>
+        <div className="mt-2 divide-y rounded-lg border">{selected.risks.map((risk, index) => <div key={`${risk.hazard}-${index}`} className="grid gap-3 p-4 md:grid-cols-[1fr_120px_120px]"><div><p className="text-sm font-bold">{risk.hazard}</p><p className="mt-1 text-xs text-text-secondary">Controles: {risk.controls.join(", ")}</p></div><div><p className="text-[10px] font-semibold text-text-secondary">INICIAL</p><RiskBadge level={risk.level} /></div><div><p className="text-[10px] font-semibold text-text-secondary">RESIDUAL</p><RiskBadge level={risk.residualLevel} /></div></div>)}</div>
+        {selected.status === "PENDING_AUTHORIZATION" && !decision && <div className="mt-6 flex justify-end gap-2"><button onClick={() => setDecision("reject")} className="rounded-md border border-red-300 px-4 py-2 text-xs font-bold text-red-700">Rejeitar</button><button onClick={() => setDecision("authorize")} className="rounded-md bg-nexus-blue-600 px-4 py-2 text-xs font-bold text-white">Autorizar atividade</button></div>}
+        {decision && <form onSubmit={submitDecision} className="mt-6 space-y-3 rounded-lg bg-surface-subtle p-4"><label className="text-xs font-semibold text-text-secondary">Justificativa da decisão<textarea required minLength={3} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 w-full rounded-md border bg-white p-3 text-sm" /></label><div className="flex justify-end gap-2"><button type="button" onClick={() => setDecision(null)} className="rounded-md border px-4 py-2 text-xs font-bold">Cancelar</button><button className={`rounded-md px-4 py-2 text-xs font-bold text-white ${decision === "authorize" ? "bg-nexus-blue-600" : "bg-red-600"}`}>Confirmar {decision === "authorize" ? "autorização" : "rejeição"}</button></div></form>}
+      </div></div>}
     </>
   );
 }
 
-function StatusBadge({ status }: { status: AprStatus }) {
-  const config = {
-    PENDING_AUTHORIZATION: {
-      icon: <Clock3 className="h-3.5 w-3.5" />,
-      className: "bg-amber-50 text-amber-800 border-amber-200",
-    },
-    AUTHORIZED: {
-      icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-      className: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    },
-    REJECTED: {
-      icon: <AlertTriangle className="h-3.5 w-3.5" />,
-      className: "bg-red-50 text-red-800 border-red-200",
-    },
-  }[status];
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-bold ${config.className}`}
-    >
-      {config.icon}
-      {statusLabels[status]}
-    </span>
-  );
-}
+function statusLabel(status: AprStatus | "ALL") { return ({ ALL: "Todas", PENDING_AUTHORIZATION: "Pendentes", AUTHORIZED: "Autorizadas", REJECTED: "Rejeitadas", DRAFT: "Rascunhos", CANCELLED: "Canceladas" })[status]; }
+function Summary({ label, value, icon, danger }: { label: string; value: number; icon: React.ReactNode; danger?: boolean }) { return <div className={`rounded-xl p-4 ${danger ? "bg-danger-soft" : "border bg-white"}`}><div className="flex items-center justify-between text-text-secondary"><p className="text-xs font-semibold">{label}</p>{icon}</div><p className="mt-3 text-2xl font-bold text-text-primary">{value}</p></div>; }
+function RiskBadge({ level }: { level: RiskLevel }) { const classes = level === "CRITICO" ? "bg-danger-soft text-danger-foreground" : level === "ALTO" ? "bg-warning-soft text-warning-foreground" : level === "MEDIO" ? "bg-info-soft text-info-foreground" : "bg-success-soft text-success-foreground"; return <span className={`mt-1 inline-block rounded px-2 py-1 text-[10px] font-bold ${classes}`}>{level}</span>; }
+function StatusBadge({ status }: { status: AprStatus }) { const label = statusLabel(status); return <span className="justify-self-start rounded bg-surface-muted px-2 py-1 text-[10px] font-bold text-text-secondary">{label}</span>; }
+function Info({ label, value }: { label: string; value: string }) { return <div><dt className="text-[10px] font-semibold text-text-secondary">{label}</dt><dd className="mt-1 text-xs font-bold text-text-primary">{value}</dd></div>; }

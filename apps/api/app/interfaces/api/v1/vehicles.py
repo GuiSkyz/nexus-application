@@ -1,120 +1,165 @@
-from typing import List, Optional, Any
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+# ruff: noqa: N815
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.infrastructure.database.models.checklist_model import ChecklistTemplateModel
+from app.infrastructure.database.models.user_model import UserModel
+from app.infrastructure.database.models.vehicle_model import VehicleModel
+from app.infrastructure.database.session import get_db
 
 router = APIRouter(prefix="/vehicles", tags=["Frota de Veículos"])
 
 
-class VehicleResponse(BaseModel):
-    id: str
-    model: str
-    plate: str
-    year: int
-    currentKm: int
-    category: str
-    status: str
-    assignedTechnicianId: Optional[str] = None
-    assignedTechnicianName: Optional[str] = None
-    assignedChecklistTemplateId: Optional[str] = None
-    assignedChecklistTitle: Optional[str] = None
-    lastInspectionDate: Optional[str] = None
+class VehiclePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
 
-
-class CreateVehicleRequest(BaseModel):
-    model: str
-    plate: str
-    year: int = 2024
-    currentKm: int = 0
+    model: str = Field(min_length=2, max_length=255)
+    plate: str = Field(min_length=7, max_length=10)
+    year: int = Field(default=2024, ge=1980, le=2100)
+    currentKm: int = Field(default=0, ge=0)
     category: str = "INSTALACAO"
     status: str = "DISPONIVEL"
-    assignedTechnicianId: Optional[str] = None
-    assignedChecklistTemplateId: Optional[str] = None
+    assignedTechnicianId: str | None = None
+    assignedChecklistTemplateId: str | None = None
+
+
+class VehicleResponse(VehiclePayload):
+    id: str
+    assignedTechnicianName: str | None = None
+    assignedChecklistTitle: str | None = None
+    lastInspectionDate: str | None = None
 
 
 class BatchAssignRequest(BaseModel):
     templateId: str
-    vehicleIds: List[str]
+    vehicleIds: list[str] = Field(min_length=1)
 
 
-# Store em memória para testes do backend
-mock_vehicles_db = [
-  {
-    "id": "veh-01",
-    "model": "Fiat Strada Endurance 1.4",
-    "plate": "ABC1D23",
-    "year": 2023,
-    "currentKm": 42150,
-    "category": "INSTALACAO",
-    "status": "DISPONIVEL",
-    "assignedTechnicianId": "tech-01",
-    "assignedTechnicianName": "João Souza (Equipe Alfa)",
-    "assignedChecklistTemplateId": "tpl-101",
-    "assignedChecklistTitle": "Vistoria Diária de Saída — Veículos da Frota (v1.0)",
-    "lastInspectionDate": "Hoje às 07:45",
-  },
-  {
-    "id": "veh-02",
-    "model": "Renault Kangoo Express 1.6",
-    "plate": "XYZ9E87",
-    "year": 2022,
-    "currentKm": 68900,
-    "category": "MANUTENCAO_FIBRA",
-    "status": "EM_VISTORIA",
-    "assignedTechnicianId": "tech-02",
-    "assignedTechnicianName": "Marcos Oliveira (Equipe Beta)",
-    "assignedChecklistTemplateId": "tpl-101",
-    "assignedChecklistTitle": "Vistoria Diária de Saída — Veículos da Frota (v1.0)",
-    "lastInspectionDate": "Ontem às 17:30",
-  },
-  {
-    "id": "veh-03",
-    "model": "Chevrolet S10 Cabine Dupla 2.8",
-    "plate": "KGB4F12",
-    "year": 2024,
-    "currentKm": 12400,
-    "category": "INFRAESTRUTURA",
-    "status": "DISPONIVEL",
-    "assignedTechnicianId": "tech-03",
-    "assignedTechnicianName": "Carlos Eduardo",
-    "assignedChecklistTemplateId": "tpl-103",
-    "assignedChecklistTitle": "Checklist de Equipamentos de Lançamento de Cabo",
-    "lastInspectionDate": "19/07/2026",
-  },
-]
+async def _response(
+    vehicle: VehicleModel, session: AsyncSession
+) -> VehicleResponse:
+    technician_name = None
+    checklist_title = None
+    if vehicle.assigned_technician_id:
+        technician = await session.get(UserModel, vehicle.assigned_technician_id)
+        technician_name = technician.full_name if technician else None
+    if vehicle.assigned_checklist_template_id:
+        checklist = await session.get(
+            ChecklistTemplateModel, vehicle.assigned_checklist_template_id
+        )
+        checklist_title = checklist.title if checklist else None
+    return VehicleResponse(
+        id=vehicle.id,
+        model=vehicle.model,
+        plate=vehicle.plate,
+        year=vehicle.year,
+        currentKm=vehicle.current_km,
+        category=vehicle.category,
+        status=vehicle.status,
+        assignedTechnicianId=vehicle.assigned_technician_id,
+        assignedTechnicianName=technician_name,
+        assignedChecklistTemplateId=vehicle.assigned_checklist_template_id,
+        assignedChecklistTitle=checklist_title,
+    )
 
 
-@router.get("", response_model=List[VehicleResponse], summary="Listagem completa da frota de veículos")
-async def list_vehicles() -> Any:
-    return mock_vehicles_db
+@router.get("", response_model=list[VehicleResponse])
+async def list_vehicles(
+    session: AsyncSession = Depends(get_db),
+) -> list[VehicleResponse]:
+    result = await session.execute(select(VehicleModel).order_by(VehicleModel.plate))
+    return [await _response(vehicle, session) for vehicle in result.scalars().all()]
 
 
-@router.post("", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED, summary="Cadastro de veículo na frota")
-async def create_vehicle(req: CreateVehicleRequest) -> Any:
-    new_veh = {
-        "id": f"veh-0{len(mock_vehicles_db) + 1}",
-        "model": req.model,
-        "plate": req.plate.upper(),
-        "year": req.year,
-        "currentKm": req.currentKm,
-        "category": req.category,
-        "status": req.status,
-        "assignedTechnicianId": req.assignedTechnicianId,
-        "assignedTechnicianName": "Técnico Alocado" if req.assignedTechnicianId else None,
-        "assignedChecklistTemplateId": req.assignedChecklistTemplateId,
-        "assignedChecklistTitle": "Checklist Padrão Atribuído" if req.assignedChecklistTemplateId else None,
-        "lastInspectionDate": "Nunca inspecionado",
+@router.post("", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED)
+async def create_vehicle(
+    payload: VehiclePayload, session: AsyncSession = Depends(get_db)
+) -> VehicleResponse:
+    normalized_plate = payload.plate.replace("-", "").upper()
+    existing = await session.scalar(
+        select(VehicleModel).where(VehicleModel.plate == normalized_plate)
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Já existe um veículo com esta placa.")
+    vehicle = VehicleModel(
+        model=payload.model.strip(),
+        plate=normalized_plate,
+        year=payload.year,
+        current_km=payload.currentKm,
+        category=payload.category,
+        status=payload.status,
+        assigned_technician_id=payload.assignedTechnicianId,
+        assigned_checklist_template_id=payload.assignedChecklistTemplateId,
+    )
+    session.add(vehicle)
+    await session.commit()
+    await session.refresh(vehicle)
+    return await _response(vehicle, session)
+
+
+@router.put("/{vehicle_id}", response_model=VehicleResponse)
+async def update_vehicle(
+    vehicle_id: str,
+    payload: VehiclePayload,
+    session: AsyncSession = Depends(get_db),
+) -> VehicleResponse:
+    vehicle = await session.get(VehicleModel, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Veículo não encontrado.")
+    normalized_plate = payload.plate.replace("-", "").upper()
+    duplicate = await session.scalar(
+        select(VehicleModel).where(
+            VehicleModel.plate == normalized_plate, VehicleModel.id != vehicle_id
+        )
+    )
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Já existe um veículo com esta placa.")
+    vehicle.model = payload.model.strip()
+    vehicle.plate = normalized_plate
+    vehicle.year = payload.year
+    vehicle.current_km = payload.currentKm
+    vehicle.category = payload.category
+    vehicle.status = payload.status
+    vehicle.assigned_technician_id = payload.assignedTechnicianId
+    vehicle.assigned_checklist_template_id = payload.assignedChecklistTemplateId
+    await session.commit()
+    await session.refresh(vehicle)
+    return await _response(vehicle, session)
+
+
+@router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_vehicle(
+    vehicle_id: str, session: AsyncSession = Depends(get_db)
+) -> None:
+    vehicle = await session.get(VehicleModel, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Veículo não encontrado.")
+    await session.delete(vehicle)
+    await session.commit()
+
+
+@router.post("/batch-assign")
+async def batch_assign(
+    request: BatchAssignRequest, session: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    checklist = await session.get(ChecklistTemplateModel, request.templateId)
+    if not checklist or checklist.status != "published":
+        raise HTTPException(
+            status_code=422, detail="Selecione um checklist publicado válido."
+        )
+    result = await session.execute(
+        select(VehicleModel).where(VehicleModel.id.in_(request.vehicleIds))
+    )
+    vehicles = result.scalars().all()
+    for vehicle in vehicles:
+        vehicle.assigned_checklist_template_id = checklist.id
+    await session.commit()
+    return {
+        "message": f"Checklist vinculado a {len(vehicles)} veículo(s).",
+        "updatedCount": len(vehicles),
     }
-    mock_vehicles_db.append(new_veh)
-    return new_veh
-
-
-@router.post("/batch-assign", summary="Atribuição de 1 checklist publicado a múltiplos veículos em lote")
-async def batch_assign(req: BatchAssignRequest) -> Any:
-    updated_count = 0
-    for v in mock_vehicles_db:
-        if v["id"] in req.vehicleIds:
-            v["assignedChecklistTemplateId"] = req.templateId
-            v["assignedChecklistTitle"] = f"Checklist Replicado ({req.templateId})"
-            updated_count += 1
-
-    return {"message": f"Checklist vinculado com sucesso a {updated_count} veículo(s).", "updatedCount": updated_count}

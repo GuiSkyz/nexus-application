@@ -18,6 +18,7 @@ export interface Vehicle {
   currentKm: number;
   category: VehicleCategory;
   status: VehicleStatus;
+  assignedTechnicianId?: string;
   assignedTechnicianName?: string; // Ex: "Carlos Silva"
   assignedTechnicianRole?: string; // Ex: "Técnico de Instalação - Equipe Alfa"
   assignedChecklistTemplateId?: string; // ID do template vinculado (ex: "tpl-101-v1")

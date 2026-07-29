@@ -1,243 +1,205 @@
-import { ReadinessResponse } from "@/types/status";
-import { Vehicle } from "@/types/vehicle";
+import { AprRecord } from "@/types/apr";
 import { ChecklistTemplate } from "@/types/checklist";
-import { MockVehicleService } from "@/lib/mockVehicles";
-import { MockChecklistService } from "@/lib/mockChecklists";
+import { StrategicDashboard } from "@/types/dashboard";
+import { Incident } from "@/types/incident";
+import { OperationalReport } from "@/types/report";
+import { OperationalSettings } from "@/types/settings";
+import { ReadinessResponse } from "@/types/status";
+import { Technician, TechnicianPayload } from "@/types/technician";
+import { Vehicle } from "@/types/vehicle";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = `Falha na operação (HTTP ${response.status}).`;
+    try {
+      const payload = await response.json();
+      message = payload.detail || message;
+    } catch {
+      // A resposta não contém JSON.
+    }
+    throw new ApiError(message, response.status);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
 
 export class ApiClient {
-  static async checkReadiness(): Promise<ReadinessResponse> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/health/ready`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return {
-          status: "unready",
-          services: data.services || {
-            postgres: "unhealthy",
-            redis: "unhealthy",
-            minio: "unhealthy",
-          },
-          errorDetail: `Status HTTP ${response.status}: ${data.status || "Serviço Indisponível"}`,
-        };
-      }
-
-      return data as ReadinessResponse;
-    } catch (error) {
-      return {
-        status: "error",
-        services: {
-          postgres: "unknown",
-          redis: "unknown",
-          minio: "unknown",
-        },
-        errorDetail: error instanceof Error ? error.message : "Falha de comunicação com o backend FastAPI.",
-      };
-    }
+  static checkReadiness() {
+    return request<ReadinessResponse>("/health/ready");
   }
 
-  // ==========================================
-  // Frota de Veículos (API FastAPI + Fallback)
-  // ==========================================
-
-  static async fetchVehicles(): Promise<Vehicle[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/vehicles`, { cache: "no-store" });
-      if (response.ok) {
-        const data = await response.json();
-        return data as Vehicle[];
-      }
-    } catch (e) {
-      // Fallback gracioso
-    }
-    return MockVehicleService.getVehicles();
+  static fetchStrategicDashboard() {
+    return request<StrategicDashboard>("/dashboard/strategic");
   }
 
-  static async createVehicle(vehicleData: Partial<Vehicle>): Promise<Vehicle> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/vehicles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(vehicleData),
-      });
-      if (response.ok) {
-        return (await response.json()) as Vehicle;
-      }
-    } catch (e) {
-      // Fallback
-    }
+  static fetchVehicles() {
+    return request<Vehicle[]>("/vehicles");
+  }
 
-    return MockVehicleService.saveVehicle({
-      model: vehicleData.model || "Novo Veículo",
-      plate: vehicleData.plate?.toUpperCase() || "NEW-0000",
-      year: vehicleData.year || 2024,
-      currentKm: vehicleData.currentKm || 0,
-      category: vehicleData.category || "INSTALACAO",
-      status: vehicleData.status || "DISPONIVEL",
-      assignedTechnicianName: vehicleData.assignedTechnicianName,
-      assignedChecklistTitle: vehicleData.assignedChecklistTitle,
+  static saveVehicle(vehicle: Partial<Vehicle>) {
+    const path = vehicle.id ? `/vehicles/${vehicle.id}` : "/vehicles";
+    return request<Vehicle>(path, {
+      method: vehicle.id ? "PUT" : "POST",
+      body: JSON.stringify(vehicle),
     });
   }
 
-  static async batchAssignVehicles(templateId: string, vehicleIds: string[]): Promise<number> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/vehicles/batch-assign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId, vehicleIds }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.updatedCount;
-      }
-    } catch (e) {
-      // Fallback
-    }
-
-    MockVehicleService.batchAssignChecklist(vehicleIds, templateId, `Checklist (${templateId})`);
-    return vehicleIds.length;
+  static deleteVehicle(id: string) {
+    return request<void>(`/vehicles/${id}`, { method: "DELETE" });
   }
 
-  // ==========================================
-  // Templates de Checklist (API FastAPI + Fallback)
-  // ==========================================
-
-  static async fetchChecklists(): Promise<ChecklistTemplate[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/checklists`, { cache: "no-store" });
-      if (response.ok) {
-        const data = await response.json();
-        return data as ChecklistTemplate[];
-      }
-    } catch (e) {
-      // Fallback
-    }
-    return MockChecklistService.getTemplates();
+  static async batchAssignVehicles(templateId: string, vehicleIds: string[]) {
+    const result = await request<{ updatedCount: number }>("/vehicles/batch-assign", {
+      method: "POST",
+      body: JSON.stringify({ templateId, vehicleIds }),
+    });
+    return result.updatedCount;
   }
 
-  static async publishChecklist(checklistId: string): Promise<ChecklistTemplate | null> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/checklists/${checklistId}/publish`, {
-        method: "POST",
-      });
-      if (response.ok) {
-        return (await response.json()) as ChecklistTemplate;
-      }
-    } catch (e) {
-      // Fallback
-    }
-
-    return MockChecklistService.publishTemplate(checklistId, "Roberto Alcantara", "COORDENADOR");
+  static fetchChecklists() {
+    return request<ChecklistTemplate[]>("/checklists");
   }
 
-  static async archiveChecklist(checklistId: string): Promise<ChecklistTemplate | null> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/checklists/${checklistId}/archive`, {
-        method: "POST",
-      });
-      if (response.ok) {
-        return (await response.json()) as ChecklistTemplate;
-      }
-    } catch (e) {
-      // Fallback
-    }
-
-    return MockChecklistService.archiveTemplate(checklistId, "Roberto Alcantara", "COORDENADOR");
+  static fetchChecklist(id: string) {
+    return request<ChecklistTemplate>(`/checklists/${id}`);
   }
 
-  static async deleteChecklist(checklistId: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/checklists/${checklistId}`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        return true;
-      }
-    } catch (e) {
-      // Fallback
-    }
-
-    try {
-      MockChecklistService.deleteTemplate(checklistId, "Roberto Alcantara", "ADMIN");
-      return true;
-    } catch (e) {
-      return false;
-    }
+  static saveChecklist(template: Partial<ChecklistTemplate>) {
+    const path = template.id ? `/checklists/${template.id}` : "/checklists";
+    return request<ChecklistTemplate>(path, {
+      method: template.id ? "PUT" : "POST",
+      body: JSON.stringify(template),
+    });
   }
 
-  // ==========================================
-  // Dashboard
-  // ==========================================
-
-  static async fetchDashboardKpis(): Promise<{
-    inspections_today: number;
-    pending_aprs: number;
-    active_vehicles: number;
-    incidents_pending: number;
-  } | null> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/dashboard/kpis`, { cache: "no-store" });
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch (e) {
-      // Retorna nulo se a API estiver fora
-    }
-    return null;
+  static publishChecklist(id: string) {
+    return request<ChecklistTemplate>(`/checklists/${id}/publish`, { method: "POST" });
   }
 
-  // ==========================================
-  // Ações Corretivas (Incidentes)
-  // ==========================================
-
-  static async fetchIncidents(): Promise<any[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/incidents`, { cache: "no-store" });
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch (e) {
-      // Fallback
-    }
-    return [];
+  static archiveChecklist(id: string) {
+    return request<ChecklistTemplate>(`/checklists/${id}/archive`, { method: "POST" });
   }
 
-  static async createActionPlan(incidentId: string, data: any): Promise<any> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}/action-plan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch (e) {
-      // Fallback
-    }
-    return null;
+  static duplicateChecklist(id: string) {
+    return request<ChecklistTemplate>(`/checklists/${id}/duplicate`, { method: "POST" });
   }
 
-  static async resolveIncident(incidentId: string, data: any): Promise<any> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch (e) {
-      // Fallback
-    }
-    return null;
+  static deleteChecklist(id: string) {
+    return request<void>(`/checklists/${id}`, { method: "DELETE" });
+  }
+
+  static fetchIncidents() {
+    return request<Incident[]>("/incidents");
+  }
+
+  static saveIncident(incident: Partial<Incident>) {
+    const path = incident.id ? `/incidents/${incident.id}` : "/incidents";
+    return request<Incident>(path, {
+      method: incident.id ? "PUT" : "POST",
+      body: JSON.stringify(incident),
+    });
+  }
+
+  static deleteIncident(id: string) {
+    return request<void>(`/incidents/${id}`, { method: "DELETE" });
+  }
+
+  static createActionPlan(id: string, data: object) {
+    return request<Incident>(`/incidents/${id}/action-plan`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  static resolveIncident(id: string, data: object) {
+    return request<Incident>(`/incidents/${id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  static fetchTechnicians() {
+    return request<Technician[]>("/technicians");
+  }
+
+  static saveTechnician(technician: Partial<TechnicianPayload> & { id?: string }) {
+    const path = technician.id ? `/technicians/${technician.id}` : "/technicians";
+    return request<Technician>(path, {
+      method: technician.id ? "PUT" : "POST",
+      body: JSON.stringify(technician),
+    });
+  }
+
+  static deleteTechnician(id: string) {
+    return request<void>(`/technicians/${id}`, { method: "DELETE" });
+  }
+
+  static fetchAprs() {
+    return request<AprRecord[]>("/apr");
+  }
+
+  static decideApr(
+    id: string,
+    decision: "authorize" | "reject",
+    supervisorName: string,
+    notes: string,
+  ) {
+    const signedAt = new Date().toISOString();
+    return request<AprRecord>(`/apr/${id}/${decision}`, {
+      method: "POST",
+      body: JSON.stringify({
+        supervisorId: "web-supervisor",
+        supervisorName,
+        notes,
+        signature: {
+          signerName: supervisorName,
+          signedAt,
+          strokes: [[{ x: 0, y: 0 }, { x: 1, y: 1 }]],
+        },
+      }),
+    });
+  }
+
+  static deleteApr(id: string) {
+    return request<void>(`/apr/${id}`, { method: "DELETE" });
+  }
+
+  static fetchOperationalReport(startDate: string, endDate: string) {
+    const query = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+    });
+    return request<OperationalReport>(`/reports/operational?${query}`);
+  }
+
+  static fetchSettings() {
+    return request<OperationalSettings>("/settings");
+  }
+
+  static saveSettings(settings: Omit<OperationalSettings, "id" | "updatedAt">) {
+    return request<OperationalSettings>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    });
   }
 }

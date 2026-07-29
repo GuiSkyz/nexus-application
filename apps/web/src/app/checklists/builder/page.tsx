@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AppHeader } from "@/components/nexus/app-header";
 import { useRole } from "@/components/nexus/role-selector";
-import { MockChecklistService } from "@/lib/mockChecklists";
+import { ApiClient } from "@/lib/apiClient";
 import {
   ChecklistTemplate,
   ChecklistSection,
@@ -35,11 +35,11 @@ function BuilderContent() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
 
-  const { activeRole, activeUser, permissions } = useRole();
+  const { activeUser, permissions } = useRole();
 
   const [template, setTemplate] = useState<ChecklistTemplate>({
-    id: `tpl-${Date.now()}-v1`,
-    templateId: `tpl-${Date.now()}`,
+    id: "",
+    templateId: "",
     title: "",
     category: "Frota & Veículos",
     description: "",
@@ -75,12 +75,15 @@ function BuilderContent() {
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    if (editId) {
-      const existing = MockChecklistService.getTemplateById(editId);
-      if (existing) {
-        setTemplate(JSON.parse(JSON.stringify(existing)));
-      }
-    }
+    if (!editId) return;
+    ApiClient.fetchChecklist(editId)
+      .then((existing) => setTemplate(existing))
+      .catch((error) =>
+        showNotification(
+          "error",
+          error instanceof Error ? error.message : "Checklist não encontrado.",
+        ),
+      );
   }, [editId]);
 
   const showNotification = (type: "success" | "error", text: string) => {
@@ -157,36 +160,34 @@ function BuilderContent() {
   };
 
   // Ações de Gravação e Publicação
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!template.title.trim()) {
       showNotification("error", "Informe o título do checklist antes de salvar.");
       return;
     }
 
     try {
-      MockChecklistService.saveDraft(template, activeUser, activeRole);
+      await ApiClient.saveChecklist({ ...template, createdBy: activeUser });
       showNotification("success", "Rascunho salvo com sucesso.");
       setTimeout(() => router.push("/checklists"), 1000);
-    } catch (e: any) {
-      showNotification("error", e.message || "Erro ao salvar rascunho.");
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "Erro ao salvar rascunho.");
     }
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!template.title.trim()) {
       showNotification("error", "Informe o título do checklist antes de publicar.");
       return;
     }
 
     try {
-      // Salvar primeiro como rascunho
-      const saved = MockChecklistService.saveDraft(template, activeUser, activeRole);
-      // Publicar
-      MockChecklistService.publishTemplate(saved.id, activeUser, activeRole);
+      const saved = await ApiClient.saveChecklist({ ...template, createdBy: activeUser });
+      await ApiClient.publishChecklist(saved.id);
       showNotification("success", "Checklist publicado com sucesso!");
       setTimeout(() => router.push("/checklists"), 1000);
-    } catch (e: any) {
-      showNotification("error", e.message || "Erro ao publicar.");
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "Erro ao publicar.");
     }
   };
 

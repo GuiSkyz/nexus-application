@@ -1,7 +1,7 @@
 import io
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
-from typing import Iterable
 
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
@@ -38,18 +38,6 @@ class OperationalRecord:
         if self.checklist_items == 0:
             return 0
         return self.conforming_items / self.checklist_items
-
-
-SAMPLE_OPERATIONAL_RECORDS = [
-    OperationalRecord(date(2026, 7, 20), "Equipe Alfa", "Caminhonete 12", "ABC1D23", 18, 216, 204, 12, 1, 9),
-    OperationalRecord(date(2026, 7, 20), "Equipe Beta", "Caminhonete 08", "DEF4G56", 15, 180, 166, 14, 2, 10),
-    OperationalRecord(date(2026, 7, 21), "Equipe Alfa", "Caminhonete 12", "ABC1D23", 20, 240, 231, 9, 0, 8),
-    OperationalRecord(date(2026, 7, 21), "Equipe Gama", "Van 04", "GHI7J89", 13, 156, 142, 14, 1, 11),
-    OperationalRecord(date(2026, 7, 22), "Equipe Beta", "Caminhonete 08", "DEF4G56", 17, 204, 194, 10, 1, 9),
-    OperationalRecord(date(2026, 7, 22), "Equipe Gama", "Van 04", "GHI7J89", 16, 192, 181, 11, 0, 9),
-    OperationalRecord(date(2026, 7, 23), "Equipe Alfa", "Caminhonete 12", "ABC1D23", 19, 228, 220, 8, 1, 6),
-    OperationalRecord(date(2026, 7, 23), "Equipe Beta", "Caminhonete 08", "DEF4G56", 18, 216, 207, 9, 0, 7),
-]
 
 
 def filter_records(
@@ -353,7 +341,11 @@ def generate_operational_pdf(records: list[OperationalRecord]) -> bytes:
                 team["resolvedNonconformities"],
             ]
         )
-    team_table = Table(team_rows, repeatRows=1, colWidths=[58 * mm, 32 * mm, 36 * mm, 28 * mm, 28 * mm, 32 * mm])
+    team_table = Table(
+        team_rows,
+        repeatRows=1,
+        colWidths=[58 * mm, 32 * mm, 36 * mm, 28 * mm, 28 * mm, 32 * mm],
+    )
     team_table.setStyle(_report_table_style())
     story.extend([team_table, Spacer(1, 6 * mm), Paragraph("Por veículo", heading)])
 
@@ -369,7 +361,11 @@ def generate_operational_pdf(records: list[OperationalRecord]) -> bytes:
                 vehicle["resolvedNonconformities"],
             ]
         )
-    fleet_table = Table(fleet_rows, repeatRows=1, colWidths=[58 * mm, 32 * mm, 36 * mm, 28 * mm, 28 * mm, 32 * mm])
+    fleet_table = Table(
+        fleet_rows,
+        repeatRows=1,
+        colWidths=[58 * mm, 32 * mm, 36 * mm, 28 * mm, 28 * mm, 32 * mm],
+    )
     fleet_table.setStyle(_report_table_style())
     story.append(fleet_table)
 

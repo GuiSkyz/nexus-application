@@ -1,7 +1,6 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.interfaces.api.v1.apr import apr_client_ids, apr_store
 from app.main import app
 
 
@@ -15,8 +14,6 @@ def signature_payload(name: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_apr_requires_supervisor_authorization_before_activity_start():
-    apr_store.clear()
-    apr_client_ids.clear()
     transport = ASGITransport(app=app)
     payload = {
         "clientGeneratedId": "f5a0de0d-c26d-442e-8448-e13fb17852d1",

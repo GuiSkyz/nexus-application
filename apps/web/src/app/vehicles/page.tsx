@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { AppHeader } from "@/components/nexus/app-header";
 import { useRole } from "@/components/nexus/role-selector";
-import { MockVehicleService } from "@/lib/mockVehicles";
-import { MockChecklistService } from "@/lib/mockChecklists";
+import { ApiClient } from "@/lib/apiClient";
 import { Vehicle, VehicleCategory, VehicleStatus } from "@/types/vehicle";
 import { ChecklistTemplate } from "@/types/checklist";
+import { Technician } from "@/types/technician";
 import {
   Truck,
   Plus,
@@ -25,9 +25,10 @@ import {
 import { KpiCard } from "@/components/nexus/kpi-card";
 
 export default function VehiclesPage() {
-  const { activeRole, activeUser, permissions } = useRole();
+  const { permissions } = useRole();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -39,24 +40,33 @@ export default function VehiclesPage() {
   const [batchSelectedTemplateId, setBatchSelectedTemplateId] = useState("");
   const [batchSelectedVehicleIds, setBatchSelectedVehicleIds] = useState<string[]>([]);
 
-  const loadData = () => {
-    setVehicles(MockVehicleService.getVehicles());
-    // Carregar apenas templates publicados
-    const pub = MockChecklistService.getTemplates().filter((t) => t.status === "published");
-    setTemplates(pub);
-    if (pub.length > 0) {
-      setBatchSelectedTemplateId(pub[0].id);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const showNotification = (type: "success" | "error", text: string) => {
+  const showNotification = useCallback((type: "success" | "error", text: string) => {
     setFeedback({ type, text });
     setTimeout(() => setFeedback(null), 4000);
-  };
+  }, []);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [vehicleData, checklistData, technicianData] = await Promise.all([
+        ApiClient.fetchVehicles(),
+        ApiClient.fetchChecklists(),
+        ApiClient.fetchTechnicians(),
+      ]);
+      const published = checklistData.filter((template) => template.status === "published");
+      setVehicles(vehicleData);
+      setTemplates(published);
+      setTechnicians(technicianData.filter((technician) => technician.isActive));
+      if (published.length > 0) {
+        setBatchSelectedTemplateId((current) => current || published[0].id);
+      }
+    } catch (error) {
+      showNotification("error", error instanceof Error ? error.message : "Não foi possível carregar a frota.");
+    }
+  }, [showNotification]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   // Filtragem de Veículos
   const filteredVehicles = vehicles.filter((v) => {
@@ -75,7 +85,7 @@ export default function VehiclesPage() {
   });
 
   // Salvar/Editar Veículo
-  const handleSaveVehicle = (e: React.FormEvent) => {
+  const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVehicle.model || !editingVehicle.plate) {
       showNotification("error", "Preencha o modelo e a placa do veículo.");
@@ -83,8 +93,8 @@ export default function VehiclesPage() {
     }
 
     try {
-      MockVehicleService.saveVehicle(editingVehicle);
-      loadData();
+      await ApiClient.saveVehicle(editingVehicle);
+      await loadData();
       setIsAddEditModalOpen(false);
       setEditingVehicle({});
       showNotification("success", "Cadastro do veículo gravado com sucesso.");
@@ -94,7 +104,7 @@ export default function VehiclesPage() {
   };
 
   // Atribuição em Lote (Sem retrabalho de duplicação de checklist)
-  const handleApplyBatchAssignment = () => {
+  const handleApplyBatchAssignment = async () => {
     if (batchSelectedVehicleIds.length === 0) {
       showNotification("error", "Selecione pelo menos um veículo para receber o checklist.");
       return;
@@ -107,13 +117,8 @@ export default function VehiclesPage() {
     const tpl = templates.find((t) => t.id === batchSelectedTemplateId);
     if (!tpl) return;
 
-    MockVehicleService.batchAssignChecklist(
-      batchSelectedVehicleIds,
-      tpl.id,
-      `${tpl.title} (v${tpl.version}.0)`
-    );
-
-    loadData();
+    await ApiClient.batchAssignVehicles(tpl.id, batchSelectedVehicleIds);
+    await loadData();
     setIsBatchModalOpen(false);
     setBatchSelectedVehicleIds([]);
     showNotification(
@@ -138,9 +143,10 @@ export default function VehiclesPage() {
     }
   };
 
-  const handleDeleteVehicle = (id: string) => {
-    MockVehicleService.deleteVehicle(id);
-    loadData();
+  const handleDeleteVehicle = async (id: string) => {
+    if (!window.confirm("Remover este veículo da frota?")) return;
+    await ApiClient.deleteVehicle(id);
+    await loadData();
     showNotification("success", "Veículo removido da frota.");
   };
 
@@ -474,13 +480,23 @@ export default function VehiclesPage() {
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Técnico Responsável</label>
-                    <input
-                      type="text"
-                      value={editingVehicle.assignedTechnicianName || ""}
-                      onChange={(e) => setEditingVehicle({ ...editingVehicle, assignedTechnicianName: e.target.value })}
-                      placeholder="Nome do Técnico"
+                    <select
+                      value={editingVehicle.assignedTechnicianId || ""}
+                      onChange={(e) =>
+                        setEditingVehicle({
+                          ...editingVehicle,
+                          assignedTechnicianId: e.target.value || undefined,
+                        })
+                      }
                       className="w-full p-2 border rounded outline-none"
-                    />
+                    >
+                      <option value="">Sem técnico responsável</option>
+                      {technicians.map((technician) => (
+                        <option key={technician.id} value={technician.id}>
+                          {technician.fullName} · {technician.teamName || "Sem equipe"}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

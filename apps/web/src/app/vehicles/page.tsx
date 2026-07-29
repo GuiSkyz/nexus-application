@@ -26,6 +26,7 @@ import { KpiCard } from "@/components/nexus/kpi-card";
 
 export default function VehiclesPage() {
   const { permissions } = useRole();
+  const canManageVehicles = permissions.canCreate || permissions.canDelete;
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
@@ -47,13 +48,15 @@ export default function VehiclesPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [vehicleData, checklistData, technicianData] = await Promise.all([
-        ApiClient.fetchVehicles(),
+      const vehicleData = await ApiClient.fetchVehicles();
+      setVehicles(vehicleData);
+      if (!canManageVehicles) return;
+
+      const [checklistData, technicianData] = await Promise.all([
         ApiClient.fetchChecklists(),
         ApiClient.fetchTechnicians(),
       ]);
       const published = checklistData.filter((template) => template.status === "published");
-      setVehicles(vehicleData);
       setTemplates(published);
       setTechnicians(technicianData.filter((technician) => technician.isActive));
       if (published.length > 0) {
@@ -62,7 +65,7 @@ export default function VehiclesPage() {
     } catch (error) {
       showNotification("error", error instanceof Error ? error.message : "Não foi possível carregar a frota.");
     }
-  }, [showNotification]);
+  }, [canManageVehicles, showNotification]);
 
   useEffect(() => {
     void loadData();
@@ -168,6 +171,16 @@ export default function VehiclesPage() {
             <button onClick={() => setFeedback(null)} className="font-bold underline">
               Fechar
             </button>
+          </div>
+        )}
+
+        {!canManageVehicles && (
+          <div className="mb-6 flex items-center gap-3 rounded-lg bg-info-soft px-4 py-3 text-sm text-info-foreground">
+            <ShieldCheck className="h-5 w-5 flex-shrink-0" />
+            <p>
+              Consulta de frota em modo somente leitura. Alterações são
+              realizadas pela gestão responsável.
+            </p>
           </div>
         )}
 
@@ -310,13 +323,15 @@ export default function VehiclesPage() {
                   <th className="py-3 px-4">Técnico Responsável</th>
                   <th className="py-3 px-4">Checklist Vinculado</th>
                   <th className="py-3 px-4">Status Veículo</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
+                  {canManageVehicles && (
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: "var(--border-default)" }}>
                 {filteredVehicles.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={canManageVehicles ? 7 : 6} className="py-12 text-center text-slate-400">
                       <Truck size={32} className="mx-auto mb-2 opacity-50" />
                       <p className="font-semibold text-sm text-slate-700">Nenhum veículo encontrado</p>
                       <p className="text-xs">Altere os filtros de busca acima para visualizar a frota.</p>
@@ -382,6 +397,7 @@ export default function VehiclesPage() {
                           </span>
                         )}
                       </td>
+                      {canManageVehicles && (
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {permissions.canCreate && (
@@ -407,6 +423,7 @@ export default function VehiclesPage() {
                           )}
                         </div>
                       </td>
+                      )}
                     </tr>
                   ))
                 )}

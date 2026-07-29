@@ -33,7 +33,7 @@ async def isolated_incident_database() -> AsyncGenerator[None, None]:
         technicians = [
             UserModel(
                 email=f"tecnico{index}@example.com",
-                hashed_password="not-used-in-tests",
+                hashed_password=get_password_hash("TecnicoTeste123!"),
                 full_name=name,
                 role="TECNICO",
                 employee_code=f"TEC-{index:03d}",

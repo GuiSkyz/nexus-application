@@ -1,7 +1,7 @@
 from typing import Annotated
 
 import jwt
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token
@@ -46,3 +46,57 @@ async def get_current_user(
             detail="Usuário inativo ou não encontrado.",
         )
     return user
+
+
+async def enforce_rbac(
+    request: Request,
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> UserModel:
+    """Aplica a matriz de autorização às rotas operacionais."""
+    role = user.role
+    method = request.method.upper()
+    path = request.url.path
+
+    if role in {"MASTER", "ADMIN", "DIRETOR"}:
+        return user
+
+    if role == "TECNICO":
+        can_view_vehicles = method == "GET" and path.startswith(
+            "/api/v1/vehicles"
+        )
+        can_sync_field_work = (
+            method == "POST" and path == "/api/v1/inspections/sync"
+        )
+        if can_view_vehicles or can_sync_field_work:
+            return user
+        _forbid()
+
+    if role == "SUPERVISOR":
+        if method == "GET":
+            return user
+        can_decide_apr = method == "POST" and (
+            path.endswith("/authorize") or path.endswith("/reject")
+        )
+        can_manage_incident = method == "POST" and (
+            path.endswith("/action-plan") or path.endswith("/resolve")
+        )
+        can_sync_field_work = (
+            method == "POST" and path == "/api/v1/inspections/sync"
+        )
+        if can_decide_apr or can_manage_incident or can_sync_field_work:
+            return user
+        _forbid()
+
+    if role == "COORDENADOR":
+        if method != "DELETE":
+            return user
+        _forbid()
+
+    _forbid()
+
+
+def _forbid() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Seu cargo não possui permissão para esta operação.",
+    )

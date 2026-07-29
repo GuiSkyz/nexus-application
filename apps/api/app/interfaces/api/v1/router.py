@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.core.auth import get_current_user
+from app.core.auth import enforce_rbac
 from app.interfaces.api.v1.apr import router as apr_router
 from app.interfaces.api.v1.auth import router as auth_router
 from app.interfaces.api.v1.checklists import router as checklists_router
@@ -17,7 +17,7 @@ from app.interfaces.api.v1.vehicles import router as vehicles_router
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(auth_router)
-protected = [Depends(get_current_user)]
+protected = [Depends(enforce_rbac)]
 api_router.include_router(inspections_router, dependencies=protected)
 api_router.include_router(vehicles_router, dependencies=protected)
 api_router.include_router(checklists_router, dependencies=protected)

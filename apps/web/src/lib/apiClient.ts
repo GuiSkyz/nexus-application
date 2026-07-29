@@ -19,7 +19,70 @@ export class ApiError extends Error {
     public readonly status: number,
   ) {
     super(message);
+    this.name = "ApiError";
   }
+}
+
+type ValidationIssue = {
+  loc?: unknown;
+  msg?: unknown;
+};
+
+const fieldLabels: Record<string, string> = {
+  email: "E-mail",
+  fullName: "Nome completo",
+  temporaryPassword: "Senha",
+};
+
+function formatValidationIssue(issue: unknown): string | null {
+  if (typeof issue === "string") return issue;
+  if (!issue || typeof issue !== "object") return null;
+
+  const { loc, msg } = issue as ValidationIssue;
+  if (typeof msg !== "string") return null;
+
+  const rawField = Array.isArray(loc)
+    ? [...loc].reverse().find((part) => typeof part === "string")
+    : undefined;
+  const field =
+    typeof rawField === "string" ? fieldLabels[rawField] || rawField : null;
+
+  if (field && /should match pattern/i.test(msg)) {
+    return `${field}: formato inválido.`;
+  }
+
+  const minimum = msg.match(/at least (\d+) characters?/i);
+  if (field && minimum) {
+    return `${field}: deve ter pelo menos ${minimum[1]} caracteres.`;
+  }
+
+  if (field && /field required/i.test(msg)) {
+    return `${field}: campo obrigatório.`;
+  }
+
+  return field ? `${field}: ${msg}` : msg;
+}
+
+export function getApiErrorMessage(
+  payload: unknown,
+  fallback: string,
+): string {
+  if (!payload || typeof payload !== "object" || !("detail" in payload)) {
+    return fallback;
+  }
+
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map(formatValidationIssue)
+      .filter((message): message is string => Boolean(message));
+    if (messages.length) return messages.join(" ");
+  }
+
+  const message = formatValidationIssue(detail);
+  return message || fallback;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -35,8 +98,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = `Falha na operação (HTTP ${response.status}).`;
     try {
-      const payload = await response.json();
-      message = payload.detail || message;
+      const payload: unknown = await response.json();
+      message = getApiErrorMessage(payload, message);
     } catch {
       // A resposta não contém JSON.
     }
@@ -85,10 +148,11 @@ export class ApiClient {
   }
 
   static saveUser(user: Partial<ManagedUserPayload> & { id?: string }) {
-    const path = user.id ? `/users/${user.id}` : "/users";
+    const { id, ...payload } = user;
+    const path = id ? `/users/${id}` : "/users";
     return request<ManagedUser>(path, {
-      method: user.id ? "PUT" : "POST",
-      body: JSON.stringify(user),
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify(payload),
     });
   }
 

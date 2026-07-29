@@ -12,7 +12,7 @@ from app.infrastructure.database.session import get_db
 router = APIRouter(prefix="/technicians", tags=["Técnicos"])
 
 
-class TechnicianPayload(BaseModel):
+class TechnicianBasePayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     fullName: str = Field(min_length=3, max_length=255)
@@ -22,7 +22,14 @@ class TechnicianPayload(BaseModel):
     teamName: str | None = None
     specialty: str | None = None
     isActive: bool = True
-    temporaryPassword: str | None = Field(default=None, min_length=8)
+
+
+class TechnicianCreatePayload(TechnicianBasePayload):
+    temporaryPassword: str = Field(min_length=10, max_length=128)
+
+
+class TechnicianUpdatePayload(TechnicianBasePayload):
+    temporaryPassword: str | None = Field(default=None, min_length=10, max_length=128)
 
 
 class TechnicianResponse(BaseModel):
@@ -69,7 +76,7 @@ async def list_technicians(
     "", response_model=TechnicianResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_technician(
-    payload: TechnicianPayload, session: AsyncSession = Depends(get_db)
+    payload: TechnicianCreatePayload, session: AsyncSession = Depends(get_db)
 ) -> TechnicianResponse:
     duplicate = await session.scalar(
         select(UserModel).where(
@@ -92,9 +99,7 @@ async def create_technician(
         specialty=payload.specialty,
         role="TECNICO",
         is_active=payload.isActive,
-        hashed_password=get_password_hash(
-            payload.temporaryPassword or "NexusOps@2026"
-        ),
+        hashed_password=get_password_hash(payload.temporaryPassword),
     )
     session.add(user)
     await session.commit()
@@ -105,7 +110,7 @@ async def create_technician(
 @router.put("/{technician_id}", response_model=TechnicianResponse)
 async def update_technician(
     technician_id: str,
-    payload: TechnicianPayload,
+    payload: TechnicianUpdatePayload,
     session: AsyncSession = Depends(get_db),
 ) -> TechnicianResponse:
     user = await session.get(UserModel, technician_id)

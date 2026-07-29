@@ -1,4 +1,5 @@
 import { AprRecord } from "@/types/apr";
+import { AuthUser, LoginResponse } from "@/types/auth";
 import { ChecklistTemplate } from "@/types/checklist";
 import { StrategicDashboard } from "@/types/dashboard";
 import { Incident } from "@/types/incident";
@@ -7,6 +8,7 @@ import { OperationalSettings } from "@/types/settings";
 import { ReadinessResponse } from "@/types/status";
 import { Technician, TechnicianPayload } from "@/types/technician";
 import { Vehicle } from "@/types/vehicle";
+import { ManagedUser, ManagedUserPayload } from "@/types/user";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -28,6 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
     cache: "no-store",
+    credentials: "include",
   });
   if (!response.ok) {
     let message = `Falha na operação (HTTP ${response.status}).`;
@@ -37,13 +40,62 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // A resposta não contém JSON.
     }
-    throw new ApiError(message, response.status);
+    const error = new ApiError(message, response.status);
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      !path.startsWith("/auth/")
+    ) {
+      window.dispatchEvent(new Event("nexusops:unauthorized"));
+    }
+    throw error;
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export class ApiClient {
+  static login(email: string, password: string) {
+    return request<LoginResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  static me() {
+    return request<AuthUser>("/auth/me");
+  }
+
+  static logout() {
+    return request<void>("/auth/logout", { method: "POST" });
+  }
+
+  static changePassword(currentPassword: string, newPassword: string) {
+    return request<void>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+  }
+
+  static fetchUsers() {
+    return request<ManagedUser[]>("/users");
+  }
+
+  static saveUser(user: Partial<ManagedUserPayload> & { id?: string }) {
+    const path = user.id ? `/users/${user.id}` : "/users";
+    return request<ManagedUser>(path, {
+      method: user.id ? "PUT" : "POST",
+      body: JSON.stringify(user),
+    });
+  }
+
+  static deleteUser(id: string) {
+    return request<void>(`/users/${id}`, { method: "DELETE" });
+  }
+
   static checkReadiness() {
     return request<ReadinessResponse>("/health/ready");
   }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AppSidebar } from "@/components/nexus/app-sidebar";
-import { RoleProvider } from "@/components/nexus/role-selector";
+import { AppShell } from "@/components/nexus/app-shell";
+import { AuthProvider } from "@/components/nexus/auth-provider";
 
 export const metadata: Metadata = {
   title: "NexusOps | Operational Compliance Platform",
@@ -17,12 +17,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className="min-h-screen">
-        <RoleProvider>
-          <AppSidebar />
-          <div className="flex min-h-screen flex-col lg:ml-[var(--sidebar-width)]">
-            {children}
-          </div>
-        </RoleProvider>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

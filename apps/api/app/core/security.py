@@ -37,3 +37,9 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     to_encode.update({"exp": expire})
     encoded_jwt: str = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    """Valida e decodifica um token de acesso assinado pela API."""
+    settings = get_settings()
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])

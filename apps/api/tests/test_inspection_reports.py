@@ -55,6 +55,13 @@ async def test_generate_inspection_report_and_store_in_object_storage():
 
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": "coordenador@nexusops.com",
+                    "password": "senha123",
+                },
+            )
             response = await client.post(
                 "/api/v1/inspections/insp-001/report",
                 json=payload,

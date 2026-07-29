@@ -57,6 +57,14 @@ async def isolated_incident_database() -> AsyncGenerator[None, None]:
             employee_code="COORD-001",
             is_active=True,
         )
+        master = UserModel(
+            email="master@nexusops.com",
+            hashed_password=get_password_hash("MasterTeste123!"),
+            full_name="Master NexusOps",
+            role="MASTER",
+            employee_code="MASTER-001",
+            is_active=True,
+        )
         inspections = [
             InspectionModel(
                 client_generated_id=f"00000000-0000-0000-0000-00000000000{index}",
@@ -77,7 +85,7 @@ async def isolated_incident_database() -> AsyncGenerator[None, None]:
                 start=1,
             )
         ]
-        session.add_all([coordinator, *technicians, *inspections])
+        session.add_all([coordinator, master, *technicians, *inspections])
         await session.flush()
         answers = [
             InspectionAnswerModel(
@@ -139,5 +147,15 @@ async def isolated_incident_database() -> AsyncGenerator[None, None]:
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """Cliente assíncrono para testes funcionais da API."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "master@nexusops.com",
+                "password": "MasterTeste123!",
+            },
+        )
+        assert response.status_code == 200
         yield ac

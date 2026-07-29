@@ -11,12 +11,15 @@ import {
   Settings,
   ShieldAlert,
   Truck,
+  Users,
 } from "lucide-react";
+import { useAuth } from "./auth-provider";
 
 interface NavItem {
   label: string;
   icon: React.ReactNode;
   href: string;
+  allowedRoles?: string[];
 }
 
 interface NavGroup {
@@ -45,6 +48,12 @@ const navigation: NavGroup[] = [
     title: "Gestão",
     items: [
       { label: "Relatórios", icon: <FileBarChart size={18} />, href: "/reports" },
+      {
+        label: "Usuários e acessos",
+        icon: <Users size={18} />,
+        href: "/users",
+        allowedRoles: ["MASTER", "DIRETOR"],
+      },
       { label: "Configurações", icon: <Settings size={18} />, href: "/settings" },
     ],
   },
@@ -52,6 +61,7 @@ const navigation: NavGroup[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   return (
     <aside
@@ -84,7 +94,13 @@ export function AppSidebar() {
               {group.title}
             </span>
             <ul className="space-y-1">
-              {group.items.map((item) => {
+              {group.items
+                .filter(
+                  (item) =>
+                    !item.allowedRoles ||
+                    (user && item.allowedRoles.includes(user.role)),
+                )
+                .map((item) => {
                 const isActive = pathname === item.href;
 
                 return (
@@ -110,7 +126,7 @@ export function AppSidebar() {
                     </a>
                   </li>
                 );
-              })}
+                })}
             </ul>
           </div>
         ))}

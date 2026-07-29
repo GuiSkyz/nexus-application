@@ -1,5 +1,6 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app.main import app
 
 
@@ -15,12 +16,25 @@ async def test_auth_login_success():
         data = response.json()
         assert "access_token" in data
         assert data["user"]["role"] == "COORDENADOR"
+        assert "nexusops_session" in response.cookies
+
+        me_response = await ac.get("/api/v1/auth/me")
+        assert me_response.status_code == 200
+        assert me_response.json()["email"] == "coordenador@nexusops.com"
+
+        logout_response = await ac.post("/api/v1/auth/logout")
+        assert logout_response.status_code == 204
+        assert (await ac.get("/api/v1/dashboard/strategic")).status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_idempotent_sync_endpoint():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await ac.post(
+            "/api/v1/auth/login",
+            json={"email": "coordenador@nexusops.com", "password": "senha123"},
+        )
         payload = {
             "items": [
                 {

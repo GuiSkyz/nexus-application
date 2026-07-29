@@ -91,10 +91,10 @@ export default function TechniciansPage() {
           <Field label="Telefone"><input value={editing.phone || ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} /></Field>
           <Field label="Equipe"><input value={editing.teamName || ""} onChange={(e) => setEditing({ ...editing, teamName: e.target.value })} /></Field>
           <Field label="Especialidade"><input value={editing.specialty || ""} onChange={(e) => setEditing({ ...editing, specialty: e.target.value })} /></Field>
-          <Field label={editing.id ? "Nova senha (opcional)" : "Senha temporária (opcional)"}><input type="password" minLength={8} value={editing.temporaryPassword || ""} onChange={(e) => setEditing({ ...editing, temporaryPassword: e.target.value || undefined })} /></Field>
+          <Field label={editing.id ? "Nova senha (opcional)" : "Senha temporária"}><input required={!editing.id} type="password" minLength={10} value={editing.temporaryPassword || ""} onChange={(e) => setEditing({ ...editing, temporaryPassword: e.target.value || undefined })} /></Field>
           <label className="flex items-center gap-2 self-end pb-3 text-xs font-semibold text-text-primary"><input type="checkbox" checked={editing.isActive ?? true} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} /> Técnico ativo</label>
         </div>
-        <p className="rounded-md bg-info-soft px-3 py-2 text-xs text-info-foreground">Quando nenhuma senha é informada no primeiro cadastro, o sistema gera uma credencial temporária padrão que deverá ser trocada no primeiro acesso.</p>
+        <p className="rounded-md bg-info-soft px-3 py-2 text-xs text-info-foreground">A senha temporária deve ter ao menos 10 caracteres. Oriente o técnico a alterá-la em Segurança da conta após o primeiro acesso.</p>
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditing(null)} className="rounded-md border px-4 py-2 text-xs font-bold">Cancelar</button><button className="rounded-md bg-nexus-blue-600 px-4 py-2 text-xs font-bold text-white">Salvar técnico</button></div>
       </form></div>}
     </>

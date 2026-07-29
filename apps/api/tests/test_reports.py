@@ -11,6 +11,10 @@ from app.main import app
 async def test_operational_report_summary_and_exports():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": "coordenador@nexusops.com", "password": "senha123"},
+        )
         summary_response = await client.get("/api/v1/reports/operational")
         xlsx_response = await client.get("/api/v1/reports/operational.xlsx")
         pdf_response = await client.get("/api/v1/reports/operational.pdf")

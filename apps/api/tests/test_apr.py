@@ -42,6 +42,10 @@ async def test_apr_requires_supervisor_authorization_before_activity_start():
     }
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": "coordenador@nexusops.com", "password": "senha123"},
+        )
         create_response = await client.post("/api/v1/apr", json=payload)
         assert create_response.status_code == 201
         created = create_response.json()
@@ -96,6 +100,10 @@ async def test_apr_rejects_residual_risk_higher_than_initial_risk():
     }
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": "coordenador@nexusops.com", "password": "senha123"},
+        )
         response = await client.post("/api/v1/apr", json=payload)
 
     assert response.status_code == 422

@@ -1,4 +1,10 @@
-export type UserRole = "TECNICO" | "SUPERVISOR" | "COORDENADOR" | "DIRETOR" | "ADMIN";
+export type UserRole =
+  | "TECNICO"
+  | "SUPERVISOR"
+  | "COORDENADOR"
+  | "DIRETOR"
+  | "ADMIN"
+  | "MASTER";
 
 export type ChecklistStatus = "draft" | "published" | "archived";
 
@@ -142,6 +148,17 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, RolePermissions> = {
     canPublish: true,
     canArchive: true,
     canDelete: true, // Condicionado a nunca ter sido publicado/utilizado
+    canViewHistory: true,
+  },
+  MASTER: {
+    canReadPublished: true,
+    canReadDrafts: true,
+    canCreate: true,
+    canEditDraft: true,
+    canCreateNewVersion: true,
+    canPublish: true,
+    canArchive: true,
+    canDelete: true,
     canViewHistory: true,
   },
 };

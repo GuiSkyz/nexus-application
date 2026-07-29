@@ -1,8 +1,22 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
-import { UserRole, ROLE_PERMISSIONS_MAP, RolePermissions } from "@/types/checklist";
-import { ShieldCheck, ChevronDown, User } from "lucide-react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { ChevronDown, LogOut, Settings, ShieldCheck, User } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import { useAuth } from "./auth-provider";
+import {
+  ROLE_PERMISSIONS_MAP,
+  RolePermissions,
+  UserRole,
+} from "@/types/checklist";
 
 interface RoleContextType {
   activeRole: UserRole;
@@ -11,130 +25,184 @@ interface RoleContextType {
   setActiveRole: (role: UserRole) => void;
 }
 
-const RoleContext = createContext<RoleContextType>({
-  activeRole: "COORDENADOR",
-  activeUser: "Roberto Alcantara (Coordenador)",
-  permissions: ROLE_PERMISSIONS_MAP.COORDENADOR,
-  setActiveRole: () => {},
-});
+const RoleContext = createContext<RoleContextType | null>(null);
 
-export const useRole = () => useContext(RoleContext);
+const roleLabels: Record<UserRole, string> = {
+  TECNICO: "Técnico",
+  SUPERVISOR: "Supervisor",
+  COORDENADOR: "Coordenador",
+  DIRETOR: "Diretor EHS",
+  ADMIN: "Administrador",
+  MASTER: "Master",
+};
+
+const simulatedRoles: UserRole[] = [
+  "MASTER",
+  "TECNICO",
+  "SUPERVISOR",
+  "COORDENADOR",
+  "DIRETOR",
+  "ADMIN",
+];
+
+export const useRole = () => {
+  const context = useContext(RoleContext);
+  if (!context) throw new Error("useRole deve ser usado dentro de RoleProvider.");
+  return context;
+};
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [activeRole, setActiveRoleState] = useState<UserRole>("COORDENADOR");
+  const { user } = useAuth();
+  const realRole = user?.role || "TECNICO";
+  const [activeRole, setActiveRoleState] = useState<UserRole>(realRole);
 
-  const getUserName = (role: UserRole) => {
-    switch (role) {
-      case "TECNICO":
-        return "Carlos Silva (Técnico de Campo)";
-      case "SUPERVISOR":
-        return "Juliana Lima (Supervisora Operacional)";
-      case "COORDENADOR":
-        return "Roberto Alcantara (Coordenador)";
-      case "DIRETOR":
-        return "Mariana Souza (Diretora EHS)";
-      case "ADMIN":
-        return "Administrador do Sistema";
-    }
-  };
+  useEffect(() => {
+    setActiveRoleState(realRole);
+  }, [realRole]);
 
-  const value: RoleContextType = {
-    activeRole,
-    activeUser: getUserName(activeRole),
-    permissions: ROLE_PERMISSIONS_MAP[activeRole],
-    setActiveRole: (role: UserRole) => setActiveRoleState(role),
-  };
+  const value = useMemo<RoleContextType>(
+    () => ({
+      activeRole,
+      activeUser: user?.name || "",
+      permissions: ROLE_PERMISSIONS_MAP[activeRole],
+      setActiveRole: (role) => {
+        if (realRole === "MASTER") setActiveRoleState(role);
+      },
+    }),
+    [activeRole, realRole, user?.name],
+  );
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
 }
 
 export function RoleSelector() {
-  const { activeRole, activeUser, setActiveRole } = useRole();
-  const [isOpen, setIsOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const { activeRole, setActiveRole } = useRole();
+  const [simulationOpen, setSimulationOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const router = useRouter();
 
-  const roles: { role: UserRole; label: string; badgeBg: string; badgeColor: string }[] = [
-    { role: "TECNICO", label: "Técnico de Campo", badgeBg: "var(--surface-muted)", badgeColor: "var(--text-secondary)" },
-    { role: "SUPERVISOR", label: "Supervisor", badgeBg: "var(--info-soft)", badgeColor: "var(--info-foreground)" },
-    { role: "COORDENADOR", label: "Coordenador", badgeBg: "var(--success-soft)", badgeColor: "var(--success-foreground)" },
-    { role: "DIRETOR", label: "Diretor EHS", badgeBg: "var(--warning-soft)", badgeColor: "var(--warning-foreground)" },
-    { role: "ADMIN", label: "Administrador", badgeBg: "var(--danger-soft)", badgeColor: "var(--danger-foreground)" },
-  ];
+  if (!user) return null;
+  const isMaster = user.role === "MASTER";
 
-  const activeConfig = roles.find((r) => r.role === activeRole) || roles[2];
+  const signOut = async () => {
+    await logout();
+    router.replace("/login");
+  };
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium transition-all duration-[140ms]"
-        style={{
-          backgroundColor: "var(--surface-subtle)",
-          border: "1px solid var(--border-default)",
-          borderRadius: "var(--radius-md)",
-          color: "var(--text-primary)",
-        }}
-        aria-label="Simulador de Perfil RBAC"
-      >
-        <ShieldCheck size={14} style={{ color: "var(--nexus-blue-600)" }} />
-        <span style={{ color: "var(--text-muted)" }}>Perfil Simulação:</span>
-        <span
-          className="px-2 py-0.5 font-semibold text-[11px]"
-          style={{
-            backgroundColor: activeConfig.badgeBg,
-            color: activeConfig.badgeColor,
-            borderRadius: "var(--radius-sm)",
-          }}
-        >
-          {activeConfig.label}
-        </span>
-        <ChevronDown size={12} style={{ color: "var(--text-muted)" }} />
-      </button>
+    <div className="flex items-center gap-2">
+      {isMaster && (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => {
+              setSimulationOpen((open) => !open);
+              setAccountOpen(false);
+            }}
+            className="flex h-9 items-center gap-2 rounded-md border bg-surface-subtle px-3 text-xs font-semibold text-text-primary"
+            aria-expanded={simulationOpen}
+            aria-haspopup="menu"
+          >
+            <ShieldCheck className="h-4 w-4 text-nexus-blue-600" />
+            <span className="hidden sm:inline text-text-secondary">
+              Visualizar como
+            </span>
+            <span>{roleLabels[activeRole]}</span>
+            <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
+          </button>
 
-      {isOpen && (
-        <div
-          className="absolute right-0 mt-2 w-64 p-2 shadow-xl border z-50 animate-in fade-in zoom-in-95 duration-100"
-          style={{
-            backgroundColor: "var(--surface-card)",
-            borderColor: "var(--border-default)",
-            borderRadius: "var(--radius-lg)",
-            boxShadow: "var(--shadow-overlay)",
-          }}
-        >
-          <div className="px-2 py-1.5 border-b mb-1" style={{ borderColor: "var(--border-default)" }}>
-            <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              Simular Perfil de Acesso (RBAC)
-            </p>
-            <p className="text-xs mt-0.5 font-medium" style={{ color: "var(--text-primary)" }}>
-              {activeUser}
-            </p>
-          </div>
-
-          <div className="space-y-0.5">
-            {roles.map((item) => (
-              <button
-                key={item.role}
-                onClick={() => {
-                  setActiveRole(item.role);
-                  setIsOpen(false);
-                }}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition-colors"
-                style={{
-                  backgroundColor: item.role === activeRole ? "var(--surface-muted)" : "transparent",
-                  color: "var(--text-primary)",
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <User size={13} style={{ color: item.role === activeRole ? "var(--nexus-blue-600)" : "var(--text-muted)" }} />
-                  <span className={item.role === activeRole ? "font-bold" : "font-normal"}>{item.label}</span>
-                </div>
-                {item.role === activeRole && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 bg-blue-500/10 text-blue-600 rounded">Ativo</span>
-                )}
-              </button>
-            ))}
-          </div>
+          {simulationOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 z-50 mt-2 w-56 rounded-lg border bg-white p-2 shadow-overlay"
+            >
+              <p className="px-2 py-1.5 text-xs font-semibold text-text-secondary">
+                Simulação exclusiva do Master
+              </p>
+              {simulatedRoles.map((role) => (
+                <button
+                  type="button"
+                  role="menuitem"
+                  key={role}
+                  onClick={() => {
+                    setActiveRole(role);
+                    setSimulationOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-xs ${
+                    role === activeRole
+                      ? "bg-nexus-blue-50 font-bold text-nexus-blue-700"
+                      : "text-text-primary hover:bg-surface-muted"
+                  }`}
+                >
+                  {roleLabels[role]}
+                  {role === activeRole && <span>Ativo</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => {
+            setAccountOpen((open) => !open);
+            setSimulationOpen(false);
+          }}
+          className="flex h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-surface-muted"
+          aria-expanded={accountOpen}
+          aria-haspopup="menu"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-nexus-blue-50 text-nexus-blue-700">
+            <User className="h-4 w-4" />
+          </span>
+          <span className="hidden max-w-40 sm:block">
+            <span className="block truncate text-xs font-bold text-text-primary">
+              {user.name}
+            </span>
+            <span className="block text-[11px] text-text-secondary">
+              {roleLabels[user.role]}
+            </span>
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
+        </button>
+
+        {accountOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 z-50 mt-2 w-64 rounded-lg border bg-white p-2 shadow-overlay"
+          >
+            <div className="border-b px-2 py-2">
+              <p className="truncate text-xs font-bold text-text-primary">
+                {user.name}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-text-secondary">
+                {user.email}
+              </p>
+            </div>
+            <Link
+              href="/account"
+              role="menuitem"
+              onClick={() => setAccountOpen(false)}
+              className="mt-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-text-primary hover:bg-surface-muted"
+            >
+              <Settings className="h-4 w-4 text-text-secondary" />
+              Segurança da conta
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void signOut()}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-semibold text-danger-foreground hover:bg-danger-soft"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

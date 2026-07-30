@@ -8,7 +8,6 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "NODE_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://app.gsfmcloud.tech/api/v1"
       }
     },
@@ -18,7 +17,6 @@
         "buildType": "apk"
       },
       "env": {
-        "NODE_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://app.gsfmcloud.tech/api/v1"
       }
     },
@@ -28,7 +26,6 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "NODE_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://app.gsfmcloud.tech/api/v1"
       }
     }

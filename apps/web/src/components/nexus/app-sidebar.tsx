@@ -52,7 +52,7 @@ const navigation: NavGroup[] = [
         label: "Dashboard",
         icon: <LayoutDashboard size={18} />,
         href: "/",
-        allowedRoles: managementRoles,
+        allowedRoles: ["TECNICO", ...managementRoles],
       },
     ],
   },

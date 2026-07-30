@@ -64,13 +64,21 @@ async def enforce_rbac(
         can_view_vehicles = method == "GET" and path.startswith(
             "/api/v1/vehicles"
         )
+        can_view_own_incidents = method == "GET" and path.startswith(
+            "/api/v1/incidents"
+        )
         can_use_mobile_context = (
             method == "GET" and path == "/api/v1/inspections/mobile-context"
         )
         can_sync_field_work = (
             method == "POST" and path == "/api/v1/inspections/sync"
         )
-        if can_view_vehicles or can_use_mobile_context or can_sync_field_work:
+        if (
+            can_view_vehicles
+            or can_view_own_incidents
+            or can_use_mobile_context
+            or can_sync_field_work
+        ):
             return user
         _forbid()
 

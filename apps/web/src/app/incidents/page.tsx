@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Edit, Plus, Search, Trash2, Wrench } from "lucide-react";
 
 import { AppHeader } from "@/components/nexus/app-header";
+import { useRole } from "@/components/nexus/role-selector";
 import { ApiClient } from "@/lib/apiClient";
 import { Incident } from "@/types/incident";
 
@@ -20,6 +21,8 @@ const emptyIncident: Partial<Incident> = {
 };
 
 export default function IncidentsPage() {
+  const { activeRole } = useRole();
+  const isTechnician = activeRole === "TECNICO";
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -86,9 +89,9 @@ export default function IncidentsPage() {
             <h1 className="text-xl font-bold text-text-primary">Tratamento de não conformidades</h1>
             <p className="mt-1 text-sm text-text-secondary">Registre desvios, atribua responsáveis e acompanhe a resolução.</p>
           </div>
-          <button onClick={() => setEditing({ ...emptyIncident })} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-nexus-blue-600 px-4 text-xs font-bold text-white hover:bg-nexus-blue-700">
+          {!isTechnician && <button onClick={() => setEditing({ ...emptyIncident })} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-nexus-blue-600 px-4 text-xs font-bold text-white hover:bg-nexus-blue-700">
             <Plus className="h-4 w-4" /> Registrar NC
-          </button>
+          </button>}
         </section>
 
         {feedback && <div role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm font-semibold text-danger-foreground">{feedback}</div>}
@@ -123,17 +126,22 @@ export default function IncidentsPage() {
                     <h2 className="text-sm font-bold text-text-primary">{incident.questionText}</h2>
                     <p className="mt-1 text-xs text-text-secondary">{incident.technicianName} · {incident.teamName} · {incident.category}</p>
                   </div>
-                  <span className="text-xs text-text-secondary">{incident.actionPlan ? `Responsável: ${incident.actionPlan.assignedTo}` : "Sem plano atribuído"}</span>
+                  <div className="text-xs text-text-secondary">
+                    {incident.actionPlan ? <>
+                      <p className="font-semibold text-text-primary">{incident.actionPlan.description}</p>
+                      <p className="mt-1">Responsável: {incident.actionPlan.assignedTo} · Prazo: {new Date(incident.actionPlan.dueDate).toLocaleString("pt-BR")}</p>
+                    </> : "Sem plano atribuído"}
+                  </div>
                   <div className="flex gap-2">
                     <Badge value={incident.severity} danger={incident.severity === "CRITICA"} />
                     <Badge value={incident.status.replaceAll("_", " ")} />
                   </div>
-                  <div className="flex justify-end gap-1">
+                  {!isTechnician && <div className="flex justify-end gap-1">
                     <button onClick={() => setEditing({ ...incident })} className="rounded p-2 text-text-secondary hover:bg-surface-muted" title="Editar"><Edit className="h-4 w-4" /></button>
                     {incident.status !== "RESOLVIDA" && <button onClick={() => setPlanIncident(incident)} className="rounded p-2 text-text-secondary hover:bg-warning-soft hover:text-warning-foreground" title="Plano de ação"><Wrench className="h-4 w-4" /></button>}
                     {incident.actionPlan && incident.status !== "RESOLVIDA" && <button onClick={() => void ApiClient.resolveIncident(incident.id, { resolutionNotes: "Resolução confirmada pela gestão." }).then(load)} className="rounded p-2 text-text-secondary hover:bg-success-soft hover:text-success-foreground" title="Concluir"><CheckCircle2 className="h-4 w-4" /></button>}
                     <button onClick={() => window.confirm("Excluir esta não conformidade?") && void ApiClient.deleteIncident(incident.id).then(load)} className="rounded p-2 text-text-secondary hover:bg-danger-soft hover:text-danger-foreground" title="Excluir"><Trash2 className="h-4 w-4" /></button>
-                  </div>
+                  </div>}
                 </article>
               ))}
             </div>

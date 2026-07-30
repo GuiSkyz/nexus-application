@@ -12,8 +12,10 @@ import { ClipboardList } from "@tamagui/lucide-icons-2/icons/ClipboardList";
 import { History } from "@tamagui/lucide-icons-2/icons/History";
 import { Home } from "@tamagui/lucide-icons-2/icons/Home";
 import { ListChecks } from "@tamagui/lucide-icons-2/icons/ListChecks";
+import { ShieldAlert } from "@tamagui/lucide-icons-2/icons/ShieldAlert";
 import { User } from "@tamagui/lucide-icons-2/icons/User";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { TamaguiProvider } from "tamagui";
 
 import tamaguiConfig from "./tamagui.config";
@@ -24,6 +26,7 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { InspectionDetailScreen } from "./src/screens/InspectionDetailScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MyTasksScreen } from "./src/screens/MyTasksScreen";
+import { ActionPlansScreen } from "./src/screens/ActionPlansScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { SyncQueueScreen } from "./src/screens/SyncQueueScreen";
 import { ApiService } from "./src/services/api";
@@ -45,12 +48,22 @@ const tabs: Array<{
 }> = [
   { name: "HOME", label: "Início", Icon: Home },
   { name: "MY_TASKS", label: "Tarefas", Icon: ClipboardList },
+  { name: "ACTION_PLANS", label: "Planos", Icon: ShieldAlert },
   { name: "ALL_CHECKLISTS", label: "Checklists", Icon: ListChecks },
   { name: "HISTORY", label: "Histórico", Icon: History },
   { name: "PROFILE", label: "Perfil", Icon: User },
 ];
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MobileApp />
+    </SafeAreaProvider>
+  );
+}
+
+function MobileApp() {
+  const insets = useSafeAreaInsets();
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState<MobileUser | null>(null);
   const [context, setContext] = useState<MobileContext | null>(null);
@@ -238,6 +251,7 @@ export default function App() {
                   onOpenChecklist={setSelectedChecklist}
                 />
               )}
+              {activeTab === "ACTION_PLANS" && <ActionPlansScreen />}
               {activeTab === "ALL_CHECKLISTS" && (
                 <AllChecklistsScreen
                   checklists={context?.checklists || []}
@@ -256,7 +270,15 @@ export default function App() {
               )}
             </View>
 
-            <View style={styles.tabBar}>
+            <View
+              style={[
+                styles.tabBar,
+                {
+                  minHeight: 66 + insets.bottom,
+                  paddingBottom: insets.bottom,
+                },
+              ]}
+            >
               {tabs.map(({ name, label, Icon }) => {
                 const active = activeTab === name;
                 return (
@@ -323,7 +345,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   tabBar: {
-    minHeight: 66,
     flexDirection: "row",
     backgroundColor: colors.surface.card,
     borderTopWidth: 1,

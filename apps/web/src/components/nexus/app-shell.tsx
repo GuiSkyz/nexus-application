@@ -32,7 +32,7 @@ function RoleAwareShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { activeRole } = useRole();
   const technicianAllowed =
-    pathname === "/vehicles" || pathname === "/account";
+    pathname === "/vehicles" || pathname === "/incidents" || pathname === "/account";
   const mustRedirect = activeRole === "TECNICO" && !technicianAllowed;
 
   useEffect(() => {

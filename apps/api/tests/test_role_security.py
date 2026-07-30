@@ -23,7 +23,6 @@ async def test_technician_can_only_read_vehicles_on_management_api():
             "/api/v1/dashboard/strategic",
             "/api/v1/technicians",
             "/api/v1/checklists",
-            "/api/v1/incidents",
             "/api/v1/apr",
             "/api/v1/reports/operational",
             "/api/v1/settings",
@@ -32,6 +31,10 @@ async def test_technician_can_only_read_vehicles_on_management_api():
         for path in forbidden_reads:
             response = await technician.get(path)
             assert response.status_code == 403, path
+
+        incidents = await technician.get("/api/v1/incidents")
+        assert incidents.status_code == 200
+        assert [item["technicianName"] for item in incidents.json()] == ["João Silva"]
 
         create_vehicle = await technician.post(
             "/api/v1/vehicles",
@@ -96,6 +99,42 @@ async def test_technician_can_still_sync_field_work():
             == "04da56f2-a115-4afb-bdde-7d95340c30ae"
             for item in body["history"]
         )
+
+
+@pytest.mark.asyncio
+async def test_technician_can_view_own_action_plan_only():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as manager:
+        login = await manager.post(
+            "/api/v1/auth/login",
+            json={"email": "master@nexusops.com", "password": "MasterTeste123!"},
+        )
+        assert login.status_code == 200
+        plan = await manager.post(
+            "/api/v1/incidents/NC-2026-085/action-plan",
+            json={
+                "description": "Substituir a escada antes da próxima atividade.",
+                "assignedTo": "João Silva",
+                "dueDate": "2026-08-01T18:00:00Z",
+                "createdBy": "Coordenação Operacional",
+            },
+        )
+        assert plan.status_code == 200
+
+    async with AsyncClient(transport=transport, base_url="http://test") as technician:
+        login = await technician.post(
+            "/api/v1/auth/login",
+            json={"email": "tecnico1@example.com", "password": "TecnicoTeste123!"},
+        )
+        assert login.status_code == 200
+        response = await technician.get("/api/v1/incidents")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["id"] == "NC-2026-085"
+    assert response.json()[0]["actionPlan"]["description"] == (
+        "Substituir a escada antes da próxima atividade."
+    )
 
 
 @pytest.mark.asyncio

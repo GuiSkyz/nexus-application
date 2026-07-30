@@ -142,7 +142,25 @@ export interface Inspection {
   completedAt?: string;
 }
 
-export type MobileTabName = "HOME" | "MY_TASKS" | "ALL_CHECKLISTS" | "HISTORY" | "PROFILE";
+export type MobileTabName = "HOME" | "MY_TASKS" | "ACTION_PLANS" | "ALL_CHECKLISTS" | "HISTORY" | "PROFILE";
+
+export interface ActionPlan {
+  id: string;
+  incidentId: string;
+  description: string;
+  assignedTo: string;
+  dueDate: string;
+  resolvedAt?: string;
+}
+
+export interface Incident {
+  id: string;
+  questionText: string;
+  category: string;
+  severity: "CRITICA" | "ALTA" | "MEDIA" | "BAIXA";
+  status: "ABERTA" | "EM_ANALISE" | "PLANO_DE_ACAO" | "RESOLVIDA" | "CANCELADA";
+  actionPlan?: ActionPlan;
+}
 
 export interface MobileUser {
   id: string;

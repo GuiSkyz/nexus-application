@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import {
   MobileContext,
   MobileUser,
+  Incident,
   ReadinessResponse,
   SyncQueueItem,
 } from "../types";
@@ -104,6 +105,10 @@ export class ApiService {
 
   static getMobileContext(): Promise<MobileContext> {
     return request<MobileContext>("/inspections/mobile-context");
+  }
+
+  static getMyIncidents(): Promise<Incident[]> {
+    return request<Incident[]>("/incidents");
   }
 
   static async getReadinessStatus(): Promise<ReadinessResponse> {

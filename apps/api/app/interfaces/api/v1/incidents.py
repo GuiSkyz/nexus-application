@@ -9,8 +9,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.auth import get_current_user
 from app.infrastructure.database.models.incident_model import ActionPlanModel, IncidentModel
 from app.infrastructure.database.session import get_db
+from app.infrastructure.database.models.user_model import UserModel
 
 router = APIRouter(prefix="/incidents", tags=["Não Conformidades e Planos de Ação"])
 
@@ -117,10 +119,13 @@ def _statement():
 @router.get("", response_model=list[IncidentResponse])
 async def list_incidents(
     session: AsyncSession = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
     status_filter: str | None = None,
     severity: str | None = None,
 ) -> list[IncidentResponse]:
     statement = _statement().order_by(IncidentModel.created_at.desc())
+    if user.role == "TECNICO":
+        statement = statement.where(IncidentModel.technician_name == user.full_name)
     if status_filter and status_filter != "ALL":
         statement = statement.where(IncidentModel.status == status_filter)
     if severity and severity != "ALL":

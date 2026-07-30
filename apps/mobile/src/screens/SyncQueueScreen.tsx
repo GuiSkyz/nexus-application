@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
-import { CheckCircle2, RefreshCw, ShieldCheck } from "@tamagui/lucide-icons-2";
+import { CheckCircle2 } from "@tamagui/lucide-icons-2/icons/CheckCircle2";
+import { RefreshCw } from "@tamagui/lucide-icons-2/icons/RefreshCw";
+import { ShieldCheck } from "@tamagui/lucide-icons-2/icons/ShieldCheck";
 import { SyncQueueItem } from "../types";
 import { OfflineStorage } from "../services/offline/storage";
 import { SyncOrchestrator } from "../services/offline/syncQueue";

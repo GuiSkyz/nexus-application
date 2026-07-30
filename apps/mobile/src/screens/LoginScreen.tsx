@@ -1,36 +1,59 @@
 import React, { useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { ShieldCheck } from "@tamagui/lucide-icons-2";
-import { colors, control, radius, shadow, spacing, typography } from "../theme/tokens";
+import { ShieldCheck } from "@tamagui/lucide-icons-2/icons/ShieldCheck";
+
+import { ApiService } from "../services/api";
+import {
+  colors,
+  control,
+  radius,
+  shadow,
+  spacing,
+  typography,
+} from "../theme/tokens";
+import { MobileUser } from "../types";
 
 interface LoginScreenProps {
-  onLoginSuccess: (user: { name: string; role: string }) => void;
+  onLoginSuccess: (user: MobileUser) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState("tecnico.silva@nexusops.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      setErrorMessage("Informe o e-mail corporativo e a senha.");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
+    setErrorMessage(null);
+    try {
+      const user = await ApiService.login(email, password);
+      onLoginSuccess(user);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível entrar. Verifique sua conexão.",
+      );
+    } finally {
       setLoading(false);
-      onLoginSuccess({
-        name: "Carlos Silva",
-        role: "Técnico operacional · Equipe Alfa",
-      });
-    }, 600);
+    }
   };
+
+  const disabled = loading || !email.trim() || !password;
 
   return (
     <KeyboardAvoidingView
@@ -38,7 +61,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       style={styles.container}
     >
       <View style={styles.content}>
-        {/* Marca & Header */}
         <View style={styles.header}>
           <View style={styles.logoBadge}>
             <Text style={styles.logoText}>N</Text>
@@ -47,7 +69,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <Text style={styles.subtitle}>Conformidade operacional para campo</Text>
         </View>
 
-        {/* Form Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Acesso do técnico</Text>
           <Text style={styles.cardSubtitle}>
@@ -55,14 +76,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </Text>
 
           <View style={styles.field}>
-            <Text style={styles.label}>E-mail Corporativo</Text>
+            <Text style={styles.label}>E-mail corporativo</Text>
             <TextInput
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder="seu.email@provedor.com"
+              placeholder="nome@empresa.com.br"
+              placeholderTextColor={colors.text.secondary}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="username"
               accessibilityLabel="E-mail corporativo"
             />
           </View>
@@ -75,14 +99,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               onChangeText={setPassword}
               secureTextEntry
               placeholder="Sua senha"
+              placeholderTextColor={colors.text.secondary}
+              textContentType="password"
               accessibilityLabel="Senha"
+              onSubmitEditing={() => {
+                if (!disabled) void handleLogin();
+              }}
             />
           </View>
 
+          {errorMessage && (
+            <View style={styles.errorNotice} accessibilityRole="alert">
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={styles.button}
-            onPress={handleLogin}
-            disabled={loading}
+            style={[styles.button, disabled && styles.buttonDisabled]}
+            onPress={() => void handleLogin()}
+            disabled={disabled}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Entrar no NexusOps"
@@ -95,10 +130,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Badge Offline Info */}
         <View style={styles.footerNotice}>
           <ShieldCheck size={18} color={colors.blue[600]} />
-          <Text style={styles.footerNoticeText}>As vistorias ficam salvas neste aparelho e sincronizam quando houver rede.</Text>
+          <Text style={styles.footerNoticeText}>
+            As vistorias ficam salvas neste aparelho e sincronizam quando houver
+            rede.
+          </Text>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -108,7 +145,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    minHeight: Platform.OS === "web" ? ("100vh" as any) : "100%",
+    minHeight: Platform.OS === "web" ? ("100vh" as never) : "100%",
     backgroundColor: colors.surface.page,
   },
   content: {
@@ -141,7 +178,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   subtitle: {
-    color: colors.text.muted,
+    color: colors.text.secondary,
     fontSize: 13,
     marginTop: 2,
   },
@@ -149,8 +186,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface.card,
     borderRadius: radius.xl,
     padding: spacing[5],
-    borderWidth: 1,
-    borderColor: colors.border.default,
     ...shadow.md,
   },
   cardTitle: {
@@ -162,6 +197,7 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     color: colors.text.secondary,
     fontSize: 12,
+    lineHeight: 18,
     marginBottom: spacing[5],
   },
   field: {
@@ -183,6 +219,17 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     color: colors.text.primary,
   },
+  errorNotice: {
+    backgroundColor: colors.danger.soft,
+    borderRadius: radius.md,
+    padding: spacing[3],
+    marginBottom: spacing[3],
+  },
+  errorText: {
+    color: colors.danger.foreground,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   button: {
     backgroundColor: colors.blue[600],
     borderRadius: radius.md,
@@ -190,6 +237,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: spacing[2],
+  },
+  buttonDisabled: {
+    opacity: 0.55,
   },
   buttonText: {
     color: colors.text.inverse,
@@ -205,7 +255,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   footerNoticeText: {
-    color: colors.text.muted,
+    flex: 1,
+    color: colors.text.secondary,
     fontSize: 11,
     textAlign: "center",
     lineHeight: 16,

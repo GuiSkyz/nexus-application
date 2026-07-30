@@ -4,19 +4,26 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
 import { SignaturePad } from "../components/SignaturePad";
-import { mockTodayActivity, mockVehicleShift } from "../services/mockMobileData";
 import { OfflineStorage } from "../services/offline/storage";
 import { SyncOrchestrator } from "../services/offline/syncQueue";
 import { colors, radius, spacing } from "../theme/tokens";
-import { ContextualChecklist, DigitalSignature } from "../types";
+import {
+  ContextualChecklist,
+  DigitalSignature,
+  MobileUser,
+  MobileVehicle,
+} from "../types";
 
 interface AprDetailScreenProps {
   checklist: ContextualChecklist;
+  user: MobileUser;
+  vehicle?: MobileVehicle;
   onBack: () => void;
   onSaveSuccess: (savedItemId: string) => void;
 }
@@ -48,6 +55,8 @@ const riskColor = (score: number) => {
 
 export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
   checklist,
+  user,
+  vehicle,
   onBack,
   onSaveSuccess,
 }) => {
@@ -67,6 +76,10 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
   );
   const [signature, setSignature] = useState<DigitalSignature | null>(null);
   const [saving, setSaving] = useState(false);
+  const [serviceOrderNumber, setServiceOrderNumber] = useState("");
+  const [location, setLocation] = useState("");
+  const [weatherConditions, setWeatherConditions] = useState("");
+  const [emergencyContact, setEmergencyContact] = useState("");
 
   const maximumRisk = useMemo(
     () => Math.max(...risks.map((risk) => risk.probability * risk.severity)),
@@ -106,6 +119,18 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
   };
 
   const submitApr = async () => {
+    if (
+      !serviceOrderNumber.trim() ||
+      !location.trim() ||
+      !weatherConditions.trim() ||
+      !emergencyContact.trim()
+    ) {
+      Alert.alert(
+        "Dados obrigatórios",
+        "Informe OS, local, condições climáticas e contato de emergência.",
+      );
+      return;
+    }
     if (!signature) {
       Alert.alert(
         "Assinatura obrigatória",
@@ -119,13 +144,17 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
       const clientGeneratedId = OfflineStorage.generateClientUUID();
       const payload = {
         clientGeneratedId,
-        serviceOrderNumber: mockTodayActivity.serviceOrderNumber,
-        activityId: mockTodayActivity.activityId,
-        activityType: "NR35",
-        location: mockTodayActivity.address,
-        technicianId: mockVehicleShift.technicianId,
-        technicianName: mockVehicleShift.technicianName,
-        teamName: mockVehicleShift.teamName,
+        serviceOrderNumber: serviceOrderNumber.trim(),
+        activityId: checklist.id,
+        activityType: checklist.category.toUpperCase().includes("NR10")
+          ? "NR10"
+          : checklist.category.toUpperCase().includes("NR35")
+            ? "NR35"
+            : "OUTRA",
+        location: location.trim(),
+        technicianId: user.id,
+        technicianName: user.name,
+        teamName: user.teamName || "Sem equipe",
         plannedStart: new Date().toISOString(),
         requiredPpe: [
           "Cinto paraquedista",
@@ -133,8 +162,8 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
           "Capacete com jugular",
           "Calçado de segurança",
         ],
-        weatherConditions: "Condições verificadas no local pelo técnico.",
-        emergencyContact: "Supervisão Operacional",
+        weatherConditions: weatherConditions.trim(),
+        emergencyContact: emergencyContact.trim(),
         risks,
         technicianSignature: signature,
         status: "PENDING_AUTHORIZATION",
@@ -173,13 +202,39 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
         </View>
 
         <View style={styles.summary}>
-          <Text style={styles.summaryTitle}>
-            {mockTodayActivity.serviceOrderNumber} · {mockTodayActivity.title}
-          </Text>
-          <Text style={styles.summaryText}>{mockTodayActivity.address}</Text>
+          <Text style={styles.summaryTitle}>{checklist.title}</Text>
           <Text style={styles.summaryMeta}>
-            {mockVehicleShift.teamName} · {mockVehicleShift.technicianName}
+            {user.teamName || "Sem equipe"} · {user.name}
+            {vehicle ? ` · ${vehicle.plate}` : ""}
           </Text>
+          <TextInput
+            style={styles.input}
+            value={serviceOrderNumber}
+            onChangeText={setServiceOrderNumber}
+            placeholder="Número da ordem de serviço"
+            placeholderTextColor={colors.text.secondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={location}
+            onChangeText={setLocation}
+            placeholder="Local da atividade"
+            placeholderTextColor={colors.text.secondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={weatherConditions}
+            onChangeText={setWeatherConditions}
+            placeholder="Condições climáticas"
+            placeholderTextColor={colors.text.secondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={emergencyContact}
+            onChangeText={setEmergencyContact}
+            placeholder="Contato de emergência"
+            placeholderTextColor={colors.text.secondary}
+          />
         </View>
 
         <View style={styles.riskSummaryRow}>
@@ -274,7 +329,7 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
             Confirmo que os riscos e controles foram verificados no local.
           </Text>
           <SignaturePad
-            signerName={mockVehicleShift.technicianName}
+            signerName={user.name}
             onChange={setSignature}
           />
         </View>
@@ -358,6 +413,17 @@ const styles = StyleSheet.create({
   summaryTitle: { color: colors.text.primary, fontSize: 15, fontWeight: "800" },
   summaryText: { color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 5 },
   summaryMeta: { color: colors.blue[600], fontSize: 11, fontWeight: "700", marginTop: 6 },
+  input: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface.subtle,
+    color: colors.text.primary,
+    fontSize: 13,
+    paddingHorizontal: 12,
+    marginTop: 10,
+  },
   riskSummaryRow: { flexDirection: "row", gap: spacing[2], marginVertical: spacing[4] },
   riskSummaryItem: {
     flex: 1,

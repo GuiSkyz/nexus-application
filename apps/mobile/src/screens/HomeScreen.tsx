@@ -1,183 +1,272 @@
-import React, { useEffect, useState } from "react";
-import { ScrollView, RefreshControl } from "react-native";
-import { YStack, XStack, Text, Button, View } from "tamagui";
-import { colors } from "../theme/tokens";
-import { mockVehicleShift, mockTodayActivity, mockContextualChecklists } from "../services/mockMobileData";
-import { OfflineStorage } from "../services/offline/storage";
-import { ArrowRight, Car, UserCircle, Activity, Wifi, MapPin } from "@tamagui/lucide-icons-2";
+import React, { useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { ArrowRight } from "@tamagui/lucide-icons-2/icons/ArrowRight";
+import { Car } from "@tamagui/lucide-icons-2/icons/Car";
+import { ClipboardCheck } from "@tamagui/lucide-icons-2/icons/ClipboardCheck";
+import { CloudOff } from "@tamagui/lucide-icons-2/icons/CloudOff";
+
+import { colors, radius, shadow, spacing } from "../theme/tokens";
+import { MobileContext, MobileTabName } from "../types";
 
 interface HomeScreenProps {
-  onNavigateTab: (tabName: any) => void;
+  context: MobileContext | null;
+  pendingSyncCount: number;
+  onRefresh: () => Promise<void>;
+  onNavigateTab: (tab: MobileTabName) => void;
   onOpenChecklist: (checklistId: string) => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab, onOpenChecklist }) => {
-  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+export const HomeScreen: React.FC<HomeScreenProps> = ({
+  context,
+  pendingSyncCount,
+  onRefresh,
+  onNavigateTab,
+  onOpenChecklist,
+}) => {
   const [refreshing, setRefreshing] = useState(false);
+  const vehicle = context?.vehicles[0];
+  const requiredChecklist =
+    context?.checklists.find((item) => item.isRequired) ||
+    context?.checklists[0];
 
-  const loadSyncStatus = async () => {
-    const queue = await OfflineStorage.getSyncQueue();
-    const pending = queue.filter((i) => i.status !== "SYNCED").length;
-    setPendingSyncCount(pending);
-  };
-
-  useEffect(() => {
-    loadSyncStatus();
-  }, []);
-
-  const onRefresh = async () => {
+  const refresh = async () => {
     setRefreshing(true);
-    await loadSyncStatus();
-    setRefreshing(false);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
   };
-
-  const individualChecklists = mockContextualChecklists.filter((c) => c.contextType === "INDIVIDUAL");
-  const pendingIndividualCount = individualChecklists.filter((c) => c.state === "PENDING").length;
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.surface.page }}
-      contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+      style={styles.container}
+      contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.blue[600]}
+          onRefresh={() => void refresh()}
           colors={[colors.blue[600]]}
         />
       }
     >
-      {/* Top Welcome Header */}
-      <YStack mb="$6" mt="$4">
-        <XStack jc="space-between" ai="center">
-          <YStack>
-            <Text color={colors.text.secondary} fontSize={16} fontWeight="500">Bom dia,</Text>
-            <Text color={colors.text.primary} fontSize={28} fontWeight="900" mt="$-1">{mockVehicleShift.technicianName}</Text>
-          </YStack>
-          <View backgroundColor={colors.blue[50]} px="$3" py="$1.5" br="$6">
-            <Text color={colors.blue[700]} fontSize={12} fontWeight="bold">Equipe Alfa</Text>
-          </View>
-        </XStack>
-        <Text color={colors.text.muted} fontSize={14} mt="$2" fontWeight="500">
-          {mockVehicleShift.date} • {mockVehicleShift.shift}
+      <View style={styles.welcome}>
+        <Text style={styles.greeting}>Olá,</Text>
+        <Text style={styles.userName}>{context?.user.name || "Técnico"}</Text>
+        <Text style={styles.team}>
+          {context?.user.teamName || "Equipe ainda não atribuída"}
         </Text>
-      </YStack>
+      </View>
 
-      {/* Card 1: Veículo Atual */}
-      <YStack backgroundColor="#ffffff" br="$6" p="$4" mb="$4" shadowColor="#000" shadowOpacity={0.03} shadowRadius={10} shadowOffset={{ height: 4, width: 0 }} elevation={2}>
-        <XStack jc="space-between" ai="center" mb="$3">
-          <XStack ai="center" gap="$2">
-            <Car size={18} color={colors.text.secondary} />
-            <Text color={colors.text.secondary} fontSize={12} fontWeight="bold" ls={1}>FROTA</Text>
-          </XStack>
-          <View backgroundColor={mockVehicleShift.isResponsible ? colors.cyan[50] : colors.surface.muted} px="$2" py="$1" br="$4">
-            <Text color={mockVehicleShift.isResponsible ? colors.cyan[600] : colors.text.secondary} fontSize={10} fontWeight="bold">
-              {mockVehicleShift.isResponsible ? "RESPONSÁVEL" : "MEMBRO"}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.iconBox}>
+            <Car size={20} color={colors.blue[600]} />
+          </View>
+          <View style={styles.headerCopy}>
+            <Text style={styles.cardLabel}>VEÍCULO ATRIBUÍDO</Text>
+            <Text style={styles.cardTitle}>
+              {vehicle?.model || "Nenhum veículo atribuído"}
             </Text>
           </View>
-        </XStack>
-
-        <Text color={colors.text.primary} fontSize={22} fontWeight="800">{mockVehicleShift.fleetNumber}</Text>
-        <XStack ai="center" gap="$3" mt="$1" mb="$4">
-          <Text color={colors.text.secondary} fontSize={14}>{mockVehicleShift.model}</Text>
-          <View backgroundColor={colors.surface.muted} px="$2" py="$1" br="$2">
-            <Text color={colors.text.primary} fontSize={12} fontWeight="bold" fontFamily="monospace">
-              {mockVehicleShift.plate}
+        </View>
+        {vehicle ? (
+          <>
+            <Text style={styles.meta}>
+              Placa {vehicle.plate} · {vehicle.currentKm.toLocaleString("pt-BR")} km
             </Text>
-          </View>
-        </XStack>
-
-        <View height={1} backgroundColor={colors.border.default} mb="$4" o={0.5} />
-
-        <XStack jc="space-between" ai="center">
-          <Text color={colors.text.muted} fontSize={12}>Última: {mockVehicleShift.lastInspectionDate}</Text>
-          <Button
-            size="$3"
-            br="$10"
-            bg={colors.blue[600]}
-            onPress={() => onNavigateTab("MY_TASKS")}
-            iconAfter={ArrowRight}
-          >
-            Vistoriar
-          </Button>
-        </XStack>
-      </YStack>
-
-      {/* Card 2: Meu Checklist Individual */}
-      <YStack backgroundColor="#ffffff" br="$6" p="$4" mb="$4" shadowColor="#000" shadowOpacity={0.03} shadowRadius={10} shadowOffset={{ height: 4, width: 0 }} elevation={2}>
-        <XStack jc="space-between" ai="center" mb="$3">
-          <XStack ai="center" gap="$2">
-            <UserCircle size={18} color={colors.text.secondary} />
-            <Text color={colors.text.secondary} fontSize={12} fontWeight="bold" ls={1}>INDIVIDUAL</Text>
-          </XStack>
-          <View backgroundColor={pendingIndividualCount > 0 ? colors.warning.soft : colors.success.soft} px="$2" py="$1" br="$4">
-            <Text color={pendingIndividualCount > 0 ? colors.warning.foreground : colors.success.foreground} fontSize={10} fontWeight="bold">
-              {pendingIndividualCount > 0 ? `${pendingIndividualCount} PENDENTE` : "CONCLUÍDO"}
-            </Text>
-          </View>
-        </XStack>
-
-        <Text color={colors.text.primary} fontSize={18} fontWeight="700">EPIs & Uniforme</Text>
-        <Text color={colors.text.secondary} fontSize={13} mt="$2" mb="$4" lh={18}>
-          Verificação obrigatória do técnico para liberação de início de atividades.
-        </Text>
-
-        <Button
-          size="$3"
-          br="$10"
-          bg={colors.surface.muted}
-          color={colors.text.primary}
-          onPress={() => onNavigateTab("MY_TASKS")}
-          iconAfter={ArrowRight}
-        >
-          Continuar
-        </Button>
-      </YStack>
-
-      {/* Card 3: Atividades de Hoje */}
-      <YStack backgroundColor="#ffffff" br="$6" p="$4" mb="$4" shadowColor="#000" shadowOpacity={0.03} shadowRadius={10} shadowOffset={{ height: 4, width: 0 }} elevation={2}>
-        <XStack jc="space-between" ai="center" mb="$3">
-          <XStack ai="center" gap="$2">
-            <Activity size={18} color={colors.text.secondary} />
-            <Text color={colors.text.secondary} fontSize={12} fontWeight="bold" ls={1}>ATIVIDADE (APR)</Text>
-          </XStack>
-          <View backgroundColor={colors.danger.soft} px="$2" py="$1" br="$4">
-            <Text color={colors.danger.foreground} fontSize={10} fontWeight="bold">
-              RISCO: {mockTodayActivity.riskLevel}
-            </Text>
-          </View>
-        </XStack>
-
-        <Text color={colors.text.primary} fontSize={16} fontWeight="700">{mockTodayActivity.serviceOrderNumber} — {mockTodayActivity.title}</Text>
-        <XStack ai="center" gap="$1.5" mt="$2" mb="$4"><MapPin size={15} color={colors.text.secondary} /><Text color={colors.text.secondary} fontSize={13}>{mockTodayActivity.address}</Text></XStack>
-
-        <Button
-          size="$3"
-          br="$10"
-          bg={colors.surface.muted}
-          color={colors.text.primary}
-          onPress={() => onNavigateTab("MY_TASKS")}
-          iconAfter={ArrowRight}
-        >
-          Ver Checklists
-        </Button>
-      </YStack>
-
-      {/* Card 4: Sincronização Offline */}
-      <XStack backgroundColor={pendingSyncCount > 0 ? colors.blue[50] : "#ffffff"} br="$6" p="$4" ai="center" gap="$4" shadowColor="#000" shadowOpacity={0.03} shadowRadius={10} shadowOffset={{ height: 4, width: 0 }} elevation={2}>
-        <Wifi size={24} color={pendingSyncCount > 0 ? colors.blue[600] : colors.text.muted} />
-        <YStack f={1}>
-          <Text color={colors.text.primary} fontWeight="700">Sincronização</Text>
-          <Text color={colors.text.muted} fontSize={12}>
-            {pendingSyncCount > 0
-              ? `${pendingSyncCount} registros aguardando rede`
-              : "Tudo sincronizado"}
+            <View style={styles.statusRow}>
+              <View style={styles.successBadge}>
+                <Text style={styles.successText}>{vehicle.status}</Text>
+              </View>
+              <Text style={styles.yearText}>Ano {vehicle.year}</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.emptyText}>
+            Solicite ao Coordenador a atribuição do veículo antes de iniciar a
+            vistoria de frota.
           </Text>
-        </YStack>
-        <Button size="$2" variant="outlined" br="$8" onPress={() => onNavigateTab("ALL_CHECKLISTS")}>
-          Ver Fila
-        </Button>
-      </XStack>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.iconBox}>
+            <ClipboardCheck size={20} color={colors.blue[600]} />
+          </View>
+          <View style={styles.headerCopy}>
+            <Text style={styles.cardLabel}>PRÓXIMA TAREFA</Text>
+            <Text style={styles.cardTitle}>
+              {requiredChecklist?.title || "Nenhum checklist publicado"}
+            </Text>
+          </View>
+        </View>
+        {requiredChecklist && (
+          <>
+            <Text style={styles.meta}>
+              {requiredChecklist.questions.length} itens · aproximadamente{" "}
+              {requiredChecklist.estimatedMinutes} minutos
+            </Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => onOpenChecklist(requiredChecklist.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Iniciar ${requiredChecklist.title}`}
+            >
+              <Text style={styles.primaryButtonText}>Iniciar checklist</Text>
+              <ArrowRight size={18} color={colors.text.inverse} />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      {pendingSyncCount > 0 && (
+        <TouchableOpacity
+          style={styles.syncNotice}
+          onPress={() => onNavigateTab("HISTORY")}
+          accessibilityRole="button"
+        >
+          <CloudOff size={20} color={colors.warning.foreground} />
+          <View style={styles.headerCopy}>
+            <Text style={styles.syncTitle}>
+              {pendingSyncCount} registro(s) aguardando envio
+            </Text>
+            <Text style={styles.syncText}>
+              Permanecem protegidos neste aparelho até a conexão retornar.
+            </Text>
+          </View>
+          <ArrowRight size={18} color={colors.warning.foreground} />
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => onNavigateTab("ALL_CHECKLISTS")}
+        accessibilityRole="button"
+      >
+        <Text style={styles.secondaryButtonText}>Ver todos os checklists</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface.page },
+  content: { padding: spacing[5], paddingBottom: spacing[7] },
+  welcome: { marginBottom: spacing[5] },
+  greeting: { color: colors.text.secondary, fontSize: 14 },
+  userName: {
+    color: colors.text.primary,
+    fontSize: 26,
+    fontWeight: "800",
+    marginTop: 1,
+  },
+  team: { color: colors.text.secondary, fontSize: 13, marginTop: 3 },
+  card: {
+    backgroundColor: colors.surface.card,
+    borderRadius: radius.lg,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    ...shadow.sm,
+  },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  iconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.blue[50],
+  },
+  headerCopy: { flex: 1 },
+  cardLabel: {
+    color: colors.text.secondary,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  cardTitle: {
+    color: colors.text.primary,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  meta: { color: colors.text.secondary, fontSize: 12, marginTop: spacing[3] },
+  emptyText: {
+    color: colors.text.secondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: spacing[3],
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing[3],
+  },
+  successBadge: {
+    borderRadius: radius.sm,
+    backgroundColor: colors.success.soft,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  successText: {
+    color: colors.success.foreground,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  yearText: { color: colors.text.secondary, fontSize: 11 },
+  primaryButton: {
+    minHeight: 48,
+    marginTop: spacing[4],
+    borderRadius: radius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.blue[600],
+  },
+  primaryButtonText: {
+    color: colors.text.inverse,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  syncNotice: {
+    minHeight: 72,
+    borderRadius: radius.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    backgroundColor: colors.warning.soft,
+  },
+  syncTitle: {
+    color: colors.warning.foreground,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  syncText: {
+    color: colors.warning.foreground,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  secondaryButton: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    color: colors.blue[600],
+    fontSize: 13,
+    fontWeight: "800",
+  },
+});

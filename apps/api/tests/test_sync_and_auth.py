@@ -1,6 +1,9 @@
+from datetime import UTC, datetime
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.security import decode_access_token
 from app.main import app
 
 
@@ -10,7 +13,7 @@ async def test_auth_login_success():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.post(
             "/api/v1/auth/login",
-            json={"email": "coordenador@nexusops.com", "password": "senha123"}
+            json={"email": "coordenador@nexusops.com", "password": "senha123"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -25,6 +28,25 @@ async def test_auth_login_success():
         logout_response = await ac.post("/api/v1/auth/logout")
         assert logout_response.status_code == 204
         assert (await ac.get("/api/v1/dashboard/strategic")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_mobile_login_uses_shift_length_session():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "coordenador@nexusops.com",
+                "password": "senha123",
+                "client": "mobile",
+            },
+        )
+
+    assert response.status_code == 200
+    claims = decode_access_token(response.json()["access_token"])
+    remaining_seconds = claims["exp"] - datetime.now(UTC).timestamp()
+    assert 11 * 60 * 60 < remaining_seconds <= 12 * 60 * 60
 
 
 @pytest.mark.asyncio

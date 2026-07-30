@@ -1,116 +1,146 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { Car, UserRound } from "@tamagui/lucide-icons-2";
-import { colors, radius, spacing, shadow } from "../theme/tokens";
-import { mockVehicleShift } from "../services/mockMobileData";
+import React, { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2 } from "@tamagui/lucide-icons-2/icons/CheckCircle2";
+import { Clock3 } from "@tamagui/lucide-icons-2/icons/Clock3";
 
-export const HistoryScreen: React.FC = () => {
+import { OfflineStorage } from "../services/offline/storage";
+import { colors, radius, shadow, spacing } from "../theme/tokens";
+import { InspectionHistoryItem, SyncQueueItem } from "../types";
+
+interface HistoryScreenProps {
+  history: InspectionHistoryItem[];
+}
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+
+export const HistoryScreen: React.FC<HistoryScreenProps> = ({ history }) => {
+  const [localItems, setLocalItems] = useState<SyncQueueItem[]>([]);
+
+  useEffect(() => {
+    void OfflineStorage.getSyncQueue().then(setLocalItems);
+  }, [history]);
+
+  const pending = localItems.filter((item) => item.status !== "SYNCED");
+
   return (
     <View style={styles.container}>
-      <View style={styles.topHeader}>
-        <Text style={styles.topTitle}>Histórico de Vistorias</Text>
-        <Text style={styles.topSubtitle}>Registros salvos e concluídos neste dispositivo</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Histórico</Text>
+        <Text style={styles.subtitle}>
+          Registros confirmados no servidor e pendências deste aparelho
+        </Text>
       </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.historyCard}>
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.typeRow}><Car size={15} color={colors.blue[600]} /><Text style={styles.cardType}>VISTORIA DE SAÍDA · FROTA</Text></View>
-            <View style={styles.syncedBadge}>
-              <Text style={styles.syncedBadgeText}>SINCRONIZADO</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        {pending.map((item) => (
+          <View key={item.id} style={styles.card}>
+            <View style={styles.row}>
+              <Clock3 size={18} color={colors.warning.foreground} />
+              <Text style={styles.pendingLabel}>
+                {item.status === "ERROR" ? "ENVIO PENDENTE" : item.status}
+              </Text>
             </View>
+            <Text style={styles.cardTitle}>
+              {(item.payload as { title?: string }).title || item.entityType}
+            </Text>
+            <Text style={styles.meta}>{formatDate(item.createdAt)}</Text>
+            {item.errorMessage && (
+              <Text style={styles.errorText}>{item.errorMessage}</Text>
+            )}
+            <Text style={styles.uuid}>{item.id}</Text>
           </View>
-          <Text style={styles.cardTitle}>Vistoria Diária — {mockVehicleShift.fleetNumber}</Text>
-          <Text style={styles.cardMeta}>Concluído em: Ontem às 17:40 • Técnico: João Souza</Text>
-          <Text style={styles.cardUuid}>UUID: 8f4a12b9-3c7d-4e9f-9a1b-0248a356e719</Text>
-        </View>
+        ))}
 
-        <View style={styles.historyCard}>
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.typeRow}><UserRound size={15} color={colors.blue[600]} /><Text style={styles.cardType}>INDIVIDUAL · CERTIFICAÇÃO</Text></View>
-            <View style={styles.syncedBadge}>
-              <Text style={styles.syncedBadgeText}>SINCRONIZADO</Text>
+        {history.map((item) => (
+          <View key={item.id} style={styles.card}>
+            <View style={styles.row}>
+              <CheckCircle2 size={18} color={colors.success.foreground} />
+              <Text style={styles.syncedLabel}>SINCRONIZADO</Text>
             </View>
+            <Text style={styles.cardTitle}>{item.title}</Text>
+            <Text style={styles.meta}>
+              {formatDate(item.completedAt)}
+              {item.vehiclePlate ? ` · ${item.vehiclePlate}` : ""}
+            </Text>
+            <Text style={styles.uuid}>{item.clientGeneratedId}</Text>
           </View>
-          <Text style={styles.cardTitle}>Validade de Treinamentos & CNH</Text>
-          <Text style={styles.cardMeta}>Concluído em: 21/07/2026 às 08:15 • Técnico: João Souza</Text>
-          <Text style={styles.cardUuid}>UUID: c4b89e21-5a0d-4b82-9f33-7e821094ab02</Text>
-        </View>
+        ))}
+
+        {pending.length === 0 && history.length === 0 && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>Nenhum registro ainda</Text>
+            <Text style={styles.emptyText}>
+              As inspeções concluídas aparecerão aqui após o primeiro envio.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface.page,
-  },
-  topHeader: {
+  container: { flex: 1, backgroundColor: colors.surface.page },
+  header: {
     backgroundColor: colors.navy[900],
-    paddingTop: 50,
     paddingHorizontal: spacing[5],
+    paddingTop: spacing[5],
     paddingBottom: spacing[4],
   },
-  topTitle: {
-    color: colors.text.inverse,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  topSubtitle: {
-    color: "rgba(214, 224, 239, 0.7)",
+  title: { color: colors.text.inverse, fontSize: 21, fontWeight: "800" },
+  subtitle: {
+    color: "#c9d5e7",
     fontSize: 12,
-    marginTop: 2,
+    lineHeight: 17,
+    marginTop: 3,
   },
-  scrollContent: {
-    padding: spacing[5],
-    gap: spacing[3],
-  },
-  historyCard: {
-    backgroundColor: colors.surface.card,
+  content: { padding: spacing[4], paddingBottom: spacing[7] },
+  card: {
     borderRadius: radius.lg,
+    backgroundColor: colors.surface.card,
     padding: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border.default,
+    marginBottom: spacing[3],
     ...shadow.sm,
   },
-  cardHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+  row: { flexDirection: "row", alignItems: "center", gap: 7 },
+  pendingLabel: {
+    color: colors.warning.foreground,
+    fontSize: 10,
+    fontWeight: "800",
   },
-  typeRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
-  cardType: {
-    color: colors.blue[600],
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  syncedBadge: {
-    backgroundColor: colors.success.soft,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-  },
-  syncedBadgeText: {
+  syncedLabel: {
     color: colors.success.foreground,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
   },
   cardTitle: {
     color: colors.text.primary,
     fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 4,
+    fontWeight: "800",
+    marginTop: spacing[3],
   },
-  cardMeta: {
-    color: colors.text.secondary,
+  meta: { color: colors.text.secondary, fontSize: 11, marginTop: 4 },
+  errorText: {
+    color: colors.danger.foreground,
     fontSize: 11,
-    marginBottom: 4,
+    lineHeight: 16,
+    marginTop: 7,
   },
-  cardUuid: {
-    color: colors.text.muted,
-    fontSize: 10,
+  uuid: {
+    color: colors.text.secondary,
+    fontSize: 9,
     fontFamily: "monospace",
+    marginTop: 8,
+  },
+  empty: { alignItems: "center", padding: spacing[7] },
+  emptyTitle: { color: colors.text.primary, fontSize: 15, fontWeight: "800" },
+  emptyText: {
+    color: colors.text.secondary,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
   },
 });

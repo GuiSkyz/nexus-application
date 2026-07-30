@@ -1,186 +1,290 @@
-import React, { useState, useEffect } from "react";
-import { StatusBar } from "expo-status-bar";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, Platform } from "react-native";
-import { Home, ClipboardList, ListChecks, History, User } from "@tamagui/lucide-icons-2";
-import { colors, control, radius } from "./src/theme/tokens";
-import { getResponsivePaddingBottom } from "./src/theme/responsive";
-import { MobileTabName, ContextualChecklist, Inspection } from "./src/types";
-import { LoginScreen } from "./src/screens/LoginScreen";
-import { HomeScreen } from "./src/screens/HomeScreen";
-import { MyTasksScreen } from "./src/screens/MyTasksScreen";
+import { ClipboardList } from "@tamagui/lucide-icons-2/icons/ClipboardList";
+import { History } from "@tamagui/lucide-icons-2/icons/History";
+import { Home } from "@tamagui/lucide-icons-2/icons/Home";
+import { ListChecks } from "@tamagui/lucide-icons-2/icons/ListChecks";
+import { User } from "@tamagui/lucide-icons-2/icons/User";
+import { StatusBar } from "expo-status-bar";
+import { TamaguiProvider } from "tamagui";
+
+import tamaguiConfig from "./tamagui.config";
 import { AllChecklistsScreen } from "./src/screens/AllChecklistsScreen";
+import { AprDetailScreen } from "./src/screens/AprDetailScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
-import { ProfileScreen } from "./src/screens/ProfileScreen";
+import { HomeScreen } from "./src/screens/HomeScreen";
 import { InspectionDetailScreen } from "./src/screens/InspectionDetailScreen";
+import { LoginScreen } from "./src/screens/LoginScreen";
+import { MyTasksScreen } from "./src/screens/MyTasksScreen";
+import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { SyncQueueScreen } from "./src/screens/SyncQueueScreen";
+import { ApiService } from "./src/services/api";
 import { OfflineStorage } from "./src/services/offline/storage";
 import { SyncOrchestrator } from "./src/services/offline/syncQueue";
+import { colors, control, radius } from "./src/theme/tokens";
+import {
+  ContextualChecklist,
+  Inspection,
+  MobileContext,
+  MobileTabName,
+  MobileUser,
+} from "./src/types";
 
-import { TamaguiProvider } from 'tamagui'
-import tamaguiConfig from './tamagui.config'
+const tabs: Array<{
+  name: MobileTabName;
+  label: string;
+  Icon: typeof Home;
+}> = [
+  { name: "HOME", label: "Início", Icon: Home },
+  { name: "MY_TASKS", label: "Tarefas", Icon: ClipboardList },
+  { name: "ALL_CHECKLISTS", label: "Checklists", Icon: ListChecks },
+  { name: "HISTORY", label: "Histórico", Icon: History },
+  { name: "PROFILE", label: "Perfil", Icon: User },
+];
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [user, setUser] = useState<MobileUser | null>(null);
+  const [context, setContext] = useState<MobileContext | null>(null);
   const [activeTab, setActiveTab] = useState<MobileTabName>("HOME");
-  const [selectedChecklist, setSelectedChecklist] = useState<ContextualChecklist | null>(null);
-  const [isExecutingChecklist, setIsExecutingChecklist] = useState(false);
+  const [selectedChecklist, setSelectedChecklist] =
+    useState<ContextualChecklist | null>(null);
   const [isSyncQueueOpen, setIsSyncQueueOpen] = useState(false);
-  const [highlightSyncId, setHighlightSyncId] = useState<string | undefined>(undefined);
+  const [highlightSyncId, setHighlightSyncId] = useState<string>();
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [usingOfflineCache, setUsingOfflineCache] = useState(false);
 
-  const updatePendingSyncCount = async () => {
+  const updatePendingSyncCount = useCallback(async () => {
     const queue = await OfflineStorage.getSyncQueue();
-    const pending = queue.filter((i) => i.status !== "SYNCED").length;
-    setPendingSyncCount(pending);
-  };
+    setPendingSyncCount(
+      queue.filter((item) => item.status !== "SYNCED").length,
+    );
+  }, []);
+
+  const loadContext = useCallback(async () => {
+    try {
+      const freshContext = await ApiService.getMobileContext();
+      setContext(freshContext);
+      setUser(freshContext.user);
+      setUsingOfflineCache(false);
+      await OfflineStorage.cacheMobileContext(freshContext);
+    } catch {
+      const cachedContext = await OfflineStorage.getCachedMobileContext();
+      if (cachedContext) {
+        setContext(cachedContext);
+        setUser(cachedContext.user);
+        setUsingOfflineCache(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    updatePendingSyncCount();
-  }, [activeTab, isExecutingChecklist, isSyncQueueOpen]);
+    const restore = async () => {
+      const restoredUser = await ApiService.restoreSession();
+      if (restoredUser) {
+        setUser(restoredUser);
+        await loadContext();
+      } else if (await ApiService.hasStoredSession()) {
+        const cachedContext = await OfflineStorage.getCachedMobileContext();
+        if (cachedContext) {
+          setUser(cachedContext.user);
+          setContext(cachedContext);
+          setUsingOfflineCache(true);
+        }
+      }
+      await updatePendingSyncCount();
+      setBooting(false);
+    };
+    void restore();
+  }, [loadContext, updatePendingSyncCount]);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((networkState) => {
-      if (networkState.isConnected && networkState.isInternetReachable !== false) {
-        void SyncOrchestrator.triggerSyncWorker().then(updatePendingSyncCount);
+      if (
+        user &&
+        networkState.isConnected &&
+        networkState.isInternetReachable !== false
+      ) {
+        void SyncOrchestrator.triggerSyncWorker().then(async () => {
+          await updatePendingSyncCount();
+          await loadContext();
+        });
       }
     });
     return unsubscribe;
-  }, []);
+  }, [loadContext, updatePendingSyncCount, user]);
 
-  const handleLoginSuccess = () => {
-    setIsLoggedIn(true);
+  const handleLoginSuccess = async (authenticatedUser: MobileUser) => {
+    setUser(authenticatedUser);
     setActiveTab("HOME");
+    await loadContext();
   };
 
-  const handleOpenChecklist = (checklist: ContextualChecklist) => {
-    setSelectedChecklist(checklist);
-    setIsExecutingChecklist(true);
+  const handleLogout = async () => {
+    await ApiService.logout();
+    await OfflineStorage.clearUserData();
+    setUser(null);
+    setContext(null);
+    setSelectedChecklist(null);
   };
 
-  const handleSaveSuccess = (savedItemId: string) => {
+  const handleSaveSuccess = async (savedItemId: string) => {
     setHighlightSyncId(savedItemId);
-    setIsExecutingChecklist(false);
+    setSelectedChecklist(null);
     setIsSyncQueueOpen(true);
-    updatePendingSyncCount();
+    await updatePendingSyncCount();
   };
 
-  // Adapter para InspectionDetailScreen
-  const getAdaptedInspectionData = (): Inspection | null => {
-    if (!selectedChecklist) return null;
-    return {
-      id: selectedChecklist.id,
-      title: selectedChecklist.title,
-      type: selectedChecklist.contextType === "VEHICLE" ? "VEHICLE_OUT" : "HEIGHT_WORK",
-      vehiclePlate: "ABC1D23",
-      vehicleModel: "Fiat Strada Endurance 1.4 (Caminhonete 12)",
-      technicianName: "João Souza",
-      scheduledDate: "Hoje, Turno Manhã",
-      status: "PENDING",
-      questions: selectedChecklist.questions,
-      answers: selectedChecklist.answers,
-      evidences: selectedChecklist.evidences,
-    };
-  };
+  const inspection: Inspection | null =
+    selectedChecklist && context
+      ? {
+          id: selectedChecklist.id,
+          templateId: selectedChecklist.id,
+          templateVersion: selectedChecklist.templateVersion,
+          title: selectedChecklist.title,
+          type:
+            selectedChecklist.contextType === "VEHICLE"
+              ? "VEHICLE_OUT"
+              : "HEIGHT_WORK",
+          vehicleId: context.vehicles[0]?.id,
+          vehiclePlate: context.vehicles[0]?.plate,
+          vehicleModel: context.vehicles[0]?.model,
+          technicianName: context.user.name,
+          scheduledDate: new Date().toISOString(),
+          status: "PENDING",
+          questions: selectedChecklist.questions,
+          answers: selectedChecklist.answers || {},
+          evidences: selectedChecklist.evidences || [],
+        }
+      : null;
+
+  if (booting) {
+    return (
+      <View style={styles.boot}>
+        <StatusBar style="dark" />
+        <ActivityIndicator size="large" color={colors.blue[600]} />
+        <Text style={styles.bootText}>Preparando seu ambiente de trabalho…</Text>
+      </View>
+    );
+  }
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaView style={styles.container}>
-        <StatusBar style="light" backgroundColor={colors.navy[900]} translucent={true} />
-
-        {/* Roteamento Principal */}
-        <View style={styles.screenContainer}>
-          {!isLoggedIn ? (
-            <LoginScreen onLoginSuccess={handleLoginSuccess} />
-          ) : isExecutingChecklist && selectedChecklist ? (
-            <InspectionDetailScreen
-              inspection={getAdaptedInspectionData()!}
-              onBack={() => setIsExecutingChecklist(false)}
-              onSaveSuccess={handleSaveSuccess}
-            />
-          ) : isSyncQueueOpen ? (
-            <SyncQueueScreen
-              highlightItemId={highlightSyncId}
-              onBack={() => setIsSyncQueueOpen(false)}
-            />
-          ) : (
-            <>
+        <StatusBar style="light" backgroundColor={colors.navy[900]} />
+        {!user ? (
+          <LoginScreen
+            onLoginSuccess={(authenticatedUser) => {
+              void handleLoginSuccess(authenticatedUser);
+            }}
+          />
+        ) : isSyncQueueOpen ? (
+          <SyncQueueScreen
+            onBack={() => {
+              setIsSyncQueueOpen(false);
+              setHighlightSyncId(undefined);
+            }}
+            highlightItemId={highlightSyncId}
+          />
+        ) : selectedChecklist?.contextType === "APR" ? (
+          <AprDetailScreen
+            checklist={selectedChecklist}
+            user={user}
+            vehicle={context?.vehicles[0]}
+            onBack={() => setSelectedChecklist(null)}
+            onSaveSuccess={(id) => void handleSaveSuccess(id)}
+          />
+        ) : inspection ? (
+          <InspectionDetailScreen
+            inspection={inspection}
+            onBack={() => setSelectedChecklist(null)}
+            onSaveSuccess={(id) => void handleSaveSuccess(id)}
+          />
+        ) : (
+          <>
+            {usingOfflineCache && (
+              <View style={styles.offlineBanner}>
+                <Text style={styles.offlineText}>
+                  Sem rede — exibindo os últimos dados sincronizados
+                </Text>
+              </View>
+            )}
+            <View style={styles.screen}>
               {activeTab === "HOME" && (
                 <HomeScreen
-                  onNavigateTab={(tab) => setActiveTab(tab)}
-                  onOpenChecklist={(id) => {
-                    /* Callback */
-                  }}
+                  context={context}
+                  pendingSyncCount={pendingSyncCount}
+                  onRefresh={loadContext}
+                  onNavigateTab={setActiveTab}
+                  onOpenChecklist={(id) =>
+                    setSelectedChecklist(
+                      context?.checklists.find((item) => item.id === id) || null,
+                    )
+                  }
                 />
               )}
-
               {activeTab === "MY_TASKS" && (
-                <MyTasksScreen onOpenChecklist={handleOpenChecklist} />
+                <MyTasksScreen
+                  checklists={context?.checklists || []}
+                  vehicles={context?.vehicles || []}
+                  onOpenChecklist={setSelectedChecklist}
+                />
               )}
-
               {activeTab === "ALL_CHECKLISTS" && (
-                <AllChecklistsScreen onOpenChecklist={handleOpenChecklist} />
+                <AllChecklistsScreen
+                  checklists={context?.checklists || []}
+                  onOpenChecklist={setSelectedChecklist}
+                />
               )}
-
-              {activeTab === "HISTORY" && <HistoryScreen />}
-
+              {activeTab === "HISTORY" && (
+                <HistoryScreen history={context?.history || []} />
+              )}
               {activeTab === "PROFILE" && (
-                <ProfileScreen onLogout={() => setIsLoggedIn(false)} />
+                <ProfileScreen
+                  user={user}
+                  vehicles={context?.vehicles || []}
+                  onLogout={() => void handleLogout()}
+                />
               )}
-            </>
-          )}
-        </View>
+            </View>
 
-        {/* Tab Bar Inferior com Responsividade Impecável */}
-        {isLoggedIn && !isExecutingChecklist && !isSyncQueueOpen && (
-          <View style={styles.tabBar}>
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === "HOME" && styles.tabItemActive]}
-              onPress={() => setActiveTab("HOME")}
-              activeOpacity={0.7}
-            >
-              <Home size={20} color={activeTab === "HOME" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
-              <Text style={[styles.tabText, activeTab === "HOME" && styles.tabTextActive]} numberOfLines={1}>Início</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === "MY_TASKS" && styles.tabItemActive]}
-              onPress={() => setActiveTab("MY_TASKS")}
-              activeOpacity={0.7}
-            >
-              <ClipboardList size={20} color={activeTab === "MY_TASKS" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
-              <Text style={[styles.tabText, activeTab === "MY_TASKS" && styles.tabTextActive]} numberOfLines={1}>Tarefas</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === "ALL_CHECKLISTS" && styles.tabItemActive]}
-              onPress={() => setActiveTab("ALL_CHECKLISTS")}
-              activeOpacity={0.7}
-            >
-              <ListChecks size={20} color={activeTab === "ALL_CHECKLISTS" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
-              <Text style={[styles.tabText, activeTab === "ALL_CHECKLISTS" && styles.tabTextActive]} numberOfLines={1}>
-                Checklists {pendingSyncCount > 0 ? `(${pendingSyncCount})` : ""}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === "HISTORY" && styles.tabItemActive]}
-              onPress={() => setActiveTab("HISTORY")}
-              activeOpacity={0.7}
-            >
-              <History size={20} color={activeTab === "HISTORY" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
-              <Text style={[styles.tabText, activeTab === "HISTORY" && styles.tabTextActive]} numberOfLines={1}>Histórico</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === "PROFILE" && styles.tabItemActive]}
-              onPress={() => setActiveTab("PROFILE")}
-              activeOpacity={0.7}
-            >
-              <User size={20} color={activeTab === "PROFILE" ? colors.cyan[500] : "rgba(214, 224, 239, 0.7)"} />
-              <Text style={[styles.tabText, activeTab === "PROFILE" && styles.tabTextActive]} numberOfLines={1}>Perfil</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.tabBar}>
+              {tabs.map(({ name, label, Icon }) => {
+                const active = activeTab === name;
+                return (
+                  <TouchableOpacity
+                    key={name}
+                    style={styles.tab}
+                    onPress={() => setActiveTab(name)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={label}
+                  >
+                    <Icon
+                      size={21}
+                      color={active ? colors.blue[600] : colors.text.secondary}
+                    />
+                    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                      {label}
+                    </Text>
+                    {name === "HISTORY" && pendingSyncCount > 0 && (
+                      <View style={styles.syncBadge}>
+                        <Text style={styles.syncBadgeText}>{pendingSyncCount}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
         )}
       </SafeAreaView>
     </TamaguiProvider>
@@ -190,40 +294,73 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    height: Platform.OS === "web" ? ("100vh" as any) : "100%",
-    backgroundColor: colors.navy[900],
-  },
-  screenContainer: {
-    flex: 1,
     backgroundColor: colors.surface.page,
   },
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: colors.navy[900],
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
-    paddingTop: 8,
-    paddingBottom: getResponsivePaddingBottom(8),
-    paddingHorizontal: 4,
-  },
-  tabItem: {
+  boot: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 16,
+    backgroundColor: colors.surface.page,
+  },
+  bootText: {
+    color: colors.text.secondary,
+    fontSize: 14,
+  },
+  screen: {
+    flex: 1,
+  },
+  offlineBanner: {
+    minHeight: 32,
+    justifyContent: "center",
+    backgroundColor: colors.warning.soft,
+    paddingHorizontal: 16,
+  },
+  offlineText: {
+    color: colors.warning.foreground,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  tabBar: {
+    minHeight: 66,
+    flexDirection: "row",
+    backgroundColor: colors.surface.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.default,
+  },
+  tab: {
+    flex: 1,
     minHeight: control.minTouchTarget,
-    paddingVertical: 6,
-    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    position: "relative",
   },
-  tabItemActive: {
-    backgroundColor: "rgba(0, 184, 230, 0.18)",
-  },
-  tabText: {
-    color: "rgba(214, 224, 239, 0.7)",
+  tabLabel: {
+    color: colors.text.secondary,
     fontSize: 10,
     fontWeight: "600",
   },
-  tabTextActive: {
-    color: colors.cyan[500],
+  tabLabelActive: {
+    color: colors.blue[600],
+    fontWeight: "800",
+  },
+  syncBadge: {
+    position: "absolute",
+    right: 13,
+    top: 7,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.danger.DEFAULT,
+  },
+  syncBadgeText: {
+    color: colors.text.inverse,
+    fontSize: 9,
     fontWeight: "800",
   },
 });

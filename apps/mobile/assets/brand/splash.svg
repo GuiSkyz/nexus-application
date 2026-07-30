@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1284" height="2778" viewBox="0 0 1284 2778">
+  <defs>
+    <linearGradient id="signal" x1="422" y1="1135" x2="862" y2="1547" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#66D9FF"/>
+      <stop offset="1" stop-color="#2F6BFF"/>
+    </linearGradient>
+  </defs>
+  <path d="M422 1547V1135L862 1547V1135" fill="none" stroke="#F8FAFC" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M422 1547L630 1362" fill="none" stroke="url(#signal)" stroke-width="92" stroke-linecap="round"/>
+  <circle cx="422" cy="1135" r="50" fill="#66D9FF"/>
+  <circle cx="862" cy="1547" r="50" fill="#2F6BFF"/>
+  <text x="642" y="1725" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="110" font-weight="700" text-anchor="middle" letter-spacing="-3">NexusOps</text>
+  <text x="642" y="1810" fill="#A9B7D0" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="600" text-anchor="middle" letter-spacing="8">OPERAÇÃO EM CAMPO</text>
+</svg>

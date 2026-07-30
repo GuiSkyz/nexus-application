@@ -67,6 +67,16 @@ async def test_technician_can_still_sync_field_work():
                         "payload": {
                             "title": "Inspeção enviada pelo aplicativo",
                             "vehiclePlate": "ABC1D23",
+                            "templateId": "template-test",
+                            "templateVersion": 1,
+                            "questions": [
+                                {
+                                    "id": "question-mobile",
+                                    "category": "Segurança",
+                                    "questionText": "O equipamento está conforme?",
+                                }
+                            ],
+                            "answers": {"question-mobile": "CONFORME"},
                         },
                         "createdAt": "2026-07-29T20:00:00Z",
                         "status": "PENDING",
@@ -75,3 +85,44 @@ async def test_technician_can_still_sync_field_work():
             },
         )
         assert response.status_code == 200
+        assert response.json()["syncedCount"] == 1
+
+        context = await technician.get("/api/v1/inspections/mobile-context")
+        assert context.status_code == 200
+        body = context.json()
+        assert body["user"]["email"] == "tecnico1@example.com"
+        assert any(
+            item["clientGeneratedId"]
+            == "04da56f2-a115-4afb-bdde-7d95340c30ae"
+            for item in body["history"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_technician_cannot_sync_another_vehicle():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as technician:
+        await technician.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tecnico1@example.com",
+                "password": "TecnicoTeste123!",
+            },
+        )
+        response = await technician.post(
+            "/api/v1/inspections/sync",
+            json={
+                "items": [
+                    {
+                        "id": "58e07399-c5bb-43ed-9e50-7976964711b5",
+                        "entityType": "INSPECTION",
+                        "payload": {
+                            "title": "Veículo não atribuído",
+                            "vehicleId": "00000000-0000-0000-0000-000000000999",
+                        },
+                        "createdAt": "2026-07-29T20:00:00Z",
+                    }
+                ]
+            },
+        )
+        assert response.status_code == 403

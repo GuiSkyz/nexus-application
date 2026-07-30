@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Optional
 from urllib.parse import quote
 
 from pydantic import model_validator
@@ -21,6 +20,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = "change_this_to_a_very_long_random_secure_secret_key_in_production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    MOBILE_ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
     CORS_ORIGINS: str = "http://localhost:3000"
 
     # PostgreSQL
@@ -29,15 +29,15 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "nexusops_user"
     POSTGRES_PASSWORD: str = "nexusops_secure_pass"
     POSTGRES_DB: str = "nexusops_db"
-    DATABASE_URL: Optional[str] = None
-    DATABASE_SYNC_URL: Optional[str] = None
+    DATABASE_URL: str | None = None
+    DATABASE_SYNC_URL: str | None = None
 
     # Redis
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: str = "nexusops_redis_secure_pass"
     REDIS_DB: int = 0
-    REDIS_URL: Optional[str] = None
+    REDIS_URL: str | None = None
     REDIS_KEY_PREFIX: str = "nexusops:"
     REDIS_CACHE_TTL: int = 3600
 
@@ -103,6 +103,6 @@ class Settings(BaseSettings):
         ]
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

@@ -66,6 +66,9 @@ async def test_generate_inspection_report_and_store_in_object_storage():
                 "/api/v1/inspections/insp-001/report",
                 json=payload,
             )
+            metadata_response = await client.get(
+                f"/api/v1/inspections/reports/{response.json()['reportId']}"
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -75,3 +78,5 @@ async def test_generate_inspection_report_and_store_in_object_storage():
     assert pdf_content.startswith(b"%PDF")
     assert body["sha256"] == hashlib.sha256(pdf_content).hexdigest()
     assert body["downloadUrl"].startswith("https://storage.test/")
+    assert metadata_response.status_code == 200
+    assert metadata_response.json()["objectKey"] == body["objectKey"]

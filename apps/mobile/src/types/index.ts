@@ -71,11 +71,15 @@ export interface ChecklistQuestion {
   category: string;
   questionText: string;
   isRequired: boolean;
+  requirePhoto?: boolean;
+  requireJustification?: boolean;
 }
 
 export interface EvidencePhoto {
   id: string;
+  questionId?: string;
   photoUri: string;
+  dataUrl?: string;
   capturedAt: string;
   latitude?: number;
   longitude?: number;
@@ -120,10 +124,13 @@ export interface ContextualChecklist {
 
 export interface Inspection {
   id: string;
+  templateId: string;
+  templateVersion: number;
   title: string;
   type: "VEHICLE_OUT" | "HEIGHT_WORK";
   vehiclePlate?: string;
   vehicleModel?: string;
+  vehicleId?: string;
   technicianName: string;
   scheduledDate: string;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
@@ -132,6 +139,59 @@ export interface Inspection {
   evidences: EvidencePhoto[];
   notes?: string;
   signature?: DigitalSignature;
+  completedAt?: string;
 }
 
 export type MobileTabName = "HOME" | "MY_TASKS" | "ALL_CHECKLISTS" | "HISTORY" | "PROFILE";
+
+export interface MobileUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  employeeCode?: string;
+  phone?: string;
+  teamName?: string;
+  specialty?: string;
+}
+
+export interface MobileVehicle {
+  id: string;
+  model: string;
+  plate: string;
+  year: number;
+  currentKm: number;
+  category: string;
+  status: string;
+  assignedChecklistTemplateId?: string;
+}
+
+export interface InspectionHistoryItem {
+  id: string;
+  clientGeneratedId: string;
+  title: string;
+  vehiclePlate?: string;
+  vehicleModel?: string;
+  status: string;
+  completedAt: string;
+}
+
+export interface AprSummary {
+  id: string;
+  clientGeneratedId: string;
+  serviceOrderNumber: string;
+  activityType: string;
+  location: string;
+  plannedStart: string;
+  status: string;
+  canStartActivity: boolean;
+  maximumResidualRiskLevel: string;
+}
+
+export interface MobileContext {
+  user: MobileUser;
+  vehicles: MobileVehicle[];
+  checklists: ContextualChecklist[];
+  history: InspectionHistoryItem[];
+  aprs: AprSummary[];
+}

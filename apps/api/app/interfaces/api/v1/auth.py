@@ -1,4 +1,5 @@
-from typing import Annotated, Any
+from datetime import timedelta
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/auth", tags=["Autenticação"])
 class LoginRequest(BaseModel):
     email: str
     password: str
+    client: Literal["web", "mobile"] = "web"
 
 
 class UserResponse(BaseModel):
@@ -66,11 +68,19 @@ async def login(
         )
 
     settings = get_settings()
-    token = create_access_token(data={"sub": user.id, "role": user.role})
+    expire_minutes = (
+        settings.MOBILE_ACCESS_TOKEN_EXPIRE_MINUTES
+        if credentials.client == "mobile"
+        else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    token = create_access_token(
+        data={"sub": user.id, "role": user.role},
+        expires_delta=timedelta(minutes=expire_minutes),
+    )
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=expire_minutes * 60,
         httponly=True,
         secure=settings.ENVIRONMENT == "production",
         samesite="lax",

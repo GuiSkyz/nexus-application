@@ -1,12 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SQLite from "expo-sqlite";
 import * as Crypto from "expo-crypto";
-import { SyncQueueItem } from "../../types";
+import { MobileContext, SyncQueueItem } from "../../types";
 
 const DATABASE_NAME = "nexusops.db";
 const SYNC_QUEUE_KEY = "@NexusOps:SyncQueue";
 const MIGRATION_KEY = "@NexusOps:SQLiteMigration:v1";
 const LOCAL_TEMPLATES_KEY = "@NexusOps:TemplatesCache";
+const MOBILE_CONTEXT_KEY = "@NexusOps:MobileContext:v1";
 
 type QueueRow = {
   id: string;
@@ -161,5 +162,18 @@ export class OfflineStorage {
 
   static async cacheTemplates(templates: unknown[]): Promise<void> {
     await AsyncStorage.setItem(LOCAL_TEMPLATES_KEY, JSON.stringify(templates));
+  }
+
+  static async cacheMobileContext(context: MobileContext): Promise<void> {
+    await AsyncStorage.setItem(MOBILE_CONTEXT_KEY, JSON.stringify(context));
+  }
+
+  static async getCachedMobileContext(): Promise<MobileContext | null> {
+    const serialized = await AsyncStorage.getItem(MOBILE_CONTEXT_KEY);
+    return serialized ? (JSON.parse(serialized) as MobileContext) : null;
+  }
+
+  static async clearUserData(): Promise<void> {
+    await AsyncStorage.multiRemove([MOBILE_CONTEXT_KEY, LOCAL_TEMPLATES_KEY]);
   }
 }

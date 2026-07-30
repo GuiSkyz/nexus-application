@@ -13,7 +13,9 @@ class MinioReportStorage:
         self.settings = get_settings()
         self.client = get_minio_client()
 
-    async def upload_pdf(self, content: bytes, object_key: str) -> str:
+    async def upload_bytes(
+        self, content: bytes, object_key: str, content_type: str
+    ) -> str:
         stream = io.BytesIO(content)
         await run_in_threadpool(
             self.client.put_object,
@@ -21,9 +23,12 @@ class MinioReportStorage:
             object_key,
             stream,
             len(content),
-            "application/pdf",
+            content_type,
         )
         return object_key
+
+    async def upload_pdf(self, content: bytes, object_key: str) -> str:
+        return await self.upload_bytes(content, object_key, "application/pdf")
 
     async def generate_download_url(self, object_key: str) -> str:
         return await run_in_threadpool(

@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { XStack, Button } from "tamagui";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { colors, radius, spacing, shadow } from "../theme/tokens";
 import { getResponsivePaddingTop, getResponsivePaddingBottom } from "../theme/responsive";
 import { Inspection, ChecklistAnswerValue, EvidencePhoto, ChecklistQuestion } from "../types";
@@ -40,7 +42,15 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
   const totalQuestions = inspection.questions.length;
   const answeredCount = Object.keys(answers).length;
   const pendingCount = totalQuestions - answeredCount;
-  const isComplete = answeredCount >= totalQuestions;
+  const requiredAnswersComplete = inspection.questions.every(
+    (question) => !question.isRequired || Boolean(answers[question.id]),
+  );
+  const requiredPhotosComplete = inspection.questions.every(
+    (question) =>
+      !question.requirePhoto ||
+      evidences.some((evidence) => evidence.questionId === question.id),
+  );
+  const isComplete = requiredAnswersComplete && requiredPhotosComplete;
 
   // Verificar se há respostas "NÃO CONFORME"
   const hasNonConformity = Object.values(answers).includes("NAO_CONFORME");
@@ -52,18 +62,53 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
     }));
   };
 
-  const handleSimulateAddPhoto = (questionCategory: string) => {
-    const newEvidence: EvidencePhoto = {
-      id: `ev-${Date.now()}`,
-      photoUri: "https://via.placeholder.com/300/0757c8/ffffff?text=Evidencia+Fotografica",
-      capturedAt: new Date().toLocaleString("pt-BR"),
-      latitude: -23.55052,
-      longitude: -46.633308,
-      description: `Evidência capturada em campo (${questionCategory})`,
-    };
+  const handleAddPhoto = async (question: ChecklistQuestion) => {
+    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cameraPermission.granted) {
+      Alert.alert(
+        "Câmera não autorizada",
+        "Permita o acesso à câmera nas configurações do aparelho.",
+      );
+      return;
+    }
 
-    setEvidences((prev) => [...prev, newEvidence]);
-    Alert.alert("Foto Anexada!", "Carimbo automático de data/hora e coordenadas GPS registrados.");
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 0.65,
+      base64: true,
+    });
+    if (result.canceled || !result.assets[0]?.base64) return;
+
+    let coordinates: { latitude?: number; longitude?: number } = {};
+    try {
+      const locationPermission =
+        await Location.requestForegroundPermissionsAsync();
+      if (locationPermission.granted) {
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        coordinates = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+      }
+    } catch {
+      // A evidência continua válida sem coordenadas quando o GPS não responde.
+    }
+
+    const asset = result.assets[0];
+    const contentType = asset.mimeType || "image/jpeg";
+    const newEvidence: EvidencePhoto = {
+      id: OfflineStorage.generateClientUUID(),
+      questionId: question.id,
+      photoUri: asset.uri,
+      dataUrl: `data:${contentType};base64,${asset.base64}`,
+      capturedAt: new Date().toISOString(),
+      ...coordinates,
+      description: `Evidência de campo · ${question.category}`,
+    };
+    setEvidences((current) => [...current, newEvidence]);
   };
 
   const handleSaveInspection = async () => {
@@ -76,6 +121,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
         evidences,
         notes,
         status: isComplete ? "COMPLETED" : "IN_PROGRESS",
+        completedAt: new Date().toISOString(),
       };
 
       const savedItem = await OfflineStorage.enqueueSyncItem("INSPECTION", payload);
@@ -269,7 +315,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                     {/* Box de Anexo de Foto Tracejado */}
                     <TouchableOpacity
                       style={styles.dashedPhotoBox}
-                      onPress={() => handleSimulateAddPhoto(q.category)}
+                      onPress={() => void handleAddPhoto(q)}
                       activeOpacity={0.7}
                     >
                       <Text style={{ fontSize: 20 }}>📷</Text>

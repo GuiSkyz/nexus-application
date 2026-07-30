@@ -3,7 +3,7 @@ from typing import BinaryIO, Protocol
 
 
 class IStorageService(ABC):
-    """Interface abstrata para armazenamento de objetos pesados (fotos, assinaturas e relatórios PDF)."""
+    """Armazenamento de objetos pesados: fotos, assinaturas e relatórios."""
 
     @abstractmethod
     async def upload_file(self, file_stream: BinaryIO, object_name: str, content_type: str) -> str:
@@ -23,6 +23,11 @@ class IStorageService(ABC):
 
 
 class ReportStorage(Protocol):
+    async def upload_bytes(
+        self, content: bytes, object_key: str, content_type: str
+    ) -> str:
+        ...
+
     async def upload_pdf(self, content: bytes, object_key: str) -> str:
         ...
 

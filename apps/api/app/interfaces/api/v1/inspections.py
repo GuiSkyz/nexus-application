@@ -1,10 +1,17 @@
+# ruff: noqa: N815
+
+import base64
+import binascii
 import hashlib
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.application.interfaces.storage import ReportStorage
 from app.application.services.inspection_report import (
@@ -15,9 +22,24 @@ from app.application.services.inspection_report import (
     SignaturePoint,
     generate_inspection_report,
 )
-from app.infrastructure.minio.report_storage import get_report_storage
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.core.auth import get_current_user
+from app.infrastructure.database.models.apr_model import AprAssessmentModel
+from app.infrastructure.database.models.checklist_model import (
+    ChecklistSectionModel,
+    ChecklistTemplateModel,
+)
 from app.infrastructure.database.models.incident_model import IncidentModel
+from app.infrastructure.database.models.inspection_model import (
+    EvidenceModel,
+    InspectionAnswerModel,
+    InspectionModel,
+)
+from app.infrastructure.database.models.report_model import InspectionReportModel
+from app.infrastructure.database.models.user_model import UserModel
+from app.infrastructure.database.models.vehicle_model import VehicleModel
+from app.infrastructure.database.session import get_db
+from app.infrastructure.minio.report_storage import get_report_storage
+from app.interfaces.api.v1.apr import CreateAprRequest, create_apr
 
 router = APIRouter(prefix="/inspections", tags=["Inspeções & Sincronização"])
 
@@ -25,13 +47,13 @@ router = APIRouter(prefix="/inspections", tags=["Inspeções & Sincronização"]
 class SyncItemRequest(BaseModel):
     id: str = Field(..., description="UUIDv4 gerado no cliente mobile")
     entityType: str = Field(..., description="INSPECTION | VEHICLE_CHECKLIST | APR")
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     createdAt: str
     status: str = "PENDING"
 
 
 class SyncBatchRequest(BaseModel):
-    items: List[SyncItemRequest]
+    items: list[SyncItemRequest]
 
 
 class SyncItemResult(BaseModel):
@@ -42,7 +64,7 @@ class SyncItemResult(BaseModel):
 
 class SyncBatchResponse(BaseModel):
     syncedCount: int
-    results: List[SyncItemResult]
+    results: list[SyncItemResult]
 
 
 class ReportAnswerRequest(BaseModel):
@@ -51,7 +73,7 @@ class ReportAnswerRequest(BaseModel):
     question: str
     value: str
     category: str = "Geral"
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class ReportEvidenceRequest(BaseModel):
@@ -59,9 +81,9 @@ class ReportEvidenceRequest(BaseModel):
 
     description: str
     capturedAt: str
-    dataUrl: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    dataUrl: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class SignaturePointRequest(BaseModel):
@@ -74,7 +96,7 @@ class ReportSignatureRequest(BaseModel):
 
     signerName: str
     signedAt: str
-    strokes: List[List[SignaturePointRequest]]
+    strokes: list[list[SignaturePointRequest]]
 
 
 class GenerateInspectionReportRequest(BaseModel):
@@ -84,12 +106,12 @@ class GenerateInspectionReportRequest(BaseModel):
     technicianName: str
     completedAt: str
     templateVersion: str
-    vehiclePlate: Optional[str] = None
-    vehicleModel: Optional[str] = None
-    serviceOrderNumber: Optional[str] = None
-    notes: Optional[str] = None
-    answers: List[ReportAnswerRequest]
-    evidences: List[ReportEvidenceRequest] = []
+    vehiclePlate: str | None = None
+    vehicleModel: str | None = None
+    serviceOrderNumber: str | None = None
+    notes: str | None = None
+    answers: list[ReportAnswerRequest]
+    evidences: list[ReportEvidenceRequest] = Field(default_factory=list)
     signature: ReportSignatureRequest
 
 
@@ -99,85 +121,381 @@ class InspectionReportResponse(BaseModel):
     objectKey: str
     sha256: str
     generatedAt: str
-    downloadUrl: Optional[str] = None
+    downloadUrl: str | None = None
 
 
-processed_uuids: set[str] = set()
-generated_reports: Dict[str, InspectionReportResponse] = {}
+def _parse_datetime(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(UTC)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.now(UTC)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _decode_evidence(data_url: str) -> tuple[bytes, str, str]:
+    try:
+        header, encoded = data_url.split(",", 1)
+        content_type = header.split(";", 1)[0].replace("data:", "")
+        extension = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+        }.get(content_type)
+        if not extension:
+            raise ValueError("Formato de imagem não suportado.")
+        content = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise HTTPException(
+            status_code=422, detail="Evidência fotográfica inválida."
+        ) from exc
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail="Cada evidência deve ter no máximo 8 MB."
+        )
+    return content, content_type, extension
+
+
+@router.get("/mobile-context")
+async def get_mobile_context(
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    vehicle_result = await session.execute(
+        select(VehicleModel)
+        .where(VehicleModel.assigned_technician_id == user.id)
+        .order_by(VehicleModel.plate)
+    )
+    vehicles = vehicle_result.scalars().all()
+    assigned_template_ids = {
+        vehicle.assigned_checklist_template_id
+        for vehicle in vehicles
+        if vehicle.assigned_checklist_template_id
+    }
+
+    checklist_result = await session.execute(
+        select(ChecklistTemplateModel)
+        .options(
+            selectinload(ChecklistTemplateModel.sections).selectinload(
+                ChecklistSectionModel.questions
+            )
+        )
+        .where(ChecklistTemplateModel.status == "published")
+        .order_by(ChecklistTemplateModel.updated_at.desc())
+    )
+    checklists = checklist_result.scalars().unique().all()
+
+    inspection_result = await session.execute(
+        select(InspectionModel)
+        .where(
+            (InspectionModel.technician_id == user.id)
+            | (
+                (InspectionModel.technician_id.is_(None))
+                & (InspectionModel.technician_name == user.full_name)
+            )
+        )
+        .order_by(InspectionModel.created_at.desc())
+        .limit(50)
+    )
+    inspections = inspection_result.scalars().all()
+
+    apr_result = await session.execute(
+        select(AprAssessmentModel)
+        .where(AprAssessmentModel.technician_id == user.id)
+        .order_by(AprAssessmentModel.created_at.desc())
+        .limit(50)
+    )
+    aprs = apr_result.scalars().all()
+
+    return {
+        "user": {
+            "id": user.id,
+            "name": user.full_name,
+            "email": user.email,
+            "role": user.role,
+            "employeeCode": user.employee_code,
+            "phone": user.phone,
+            "teamName": user.team_name,
+            "specialty": user.specialty,
+        },
+        "vehicles": [
+            {
+                "id": vehicle.id,
+                "model": vehicle.model,
+                "plate": vehicle.plate,
+                "year": vehicle.year,
+                "currentKm": vehicle.current_km,
+                "category": vehicle.category,
+                "status": vehicle.status,
+                "assignedChecklistTemplateId": (
+                    vehicle.assigned_checklist_template_id
+                ),
+            }
+            for vehicle in vehicles
+        ],
+        "checklists": [
+            {
+                "id": checklist.id,
+                "templateId": checklist.template_family_id,
+                "templateVersion": checklist.version,
+                "title": checklist.title,
+                "category": checklist.category,
+                "description": checklist.description,
+                "contextType": (
+                    "APR"
+                    if "APR" in checklist.category.upper()
+                    or "RISCO" in checklist.title.upper()
+                    else (
+                        "VEHICLE"
+                        if checklist.id in assigned_template_ids
+                        else "INDIVIDUAL"
+                    )
+                ),
+                "isRequired": checklist.id in assigned_template_ids,
+                "state": "PENDING",
+                "estimatedMinutes": max(
+                    5,
+                    sum(
+                        len(section.questions)
+                        for section in checklist.sections
+                    )
+                    * 2,
+                ),
+                "questions": [
+                    {
+                        "id": question.id,
+                        "category": section.title,
+                        "questionText": question.question_text,
+                        "isRequired": question.is_required,
+                        "requirePhoto": question.require_photo,
+                        "requireJustification": (
+                            question.require_justification
+                        ),
+                    }
+                    for section in sorted(
+                        checklist.sections, key=lambda item: item.order
+                    )
+                    for question in sorted(
+                        section.questions, key=lambda item: item.order
+                    )
+                ],
+                "answers": {},
+                "evidences": [],
+            }
+            for checklist in checklists
+        ],
+        "history": [
+            {
+                "id": inspection.id,
+                "clientGeneratedId": inspection.client_generated_id,
+                "title": inspection.title,
+                "vehiclePlate": inspection.vehicle_plate,
+                "vehicleModel": inspection.vehicle_model,
+                "status": inspection.status,
+                "completedAt": (
+                    inspection.completed_at or inspection.created_at
+                ).isoformat(),
+            }
+            for inspection in inspections
+        ],
+        "aprs": [
+            {
+                "id": apr.id,
+                "clientGeneratedId": apr.client_generated_id,
+                "serviceOrderNumber": apr.service_order_number,
+                "activityType": apr.activity_type,
+                "location": apr.location,
+                "plannedStart": apr.planned_start,
+                "status": apr.status,
+                "canStartActivity": apr.can_start_activity,
+                "maximumResidualRiskLevel": apr.maximum_residual_risk_level,
+            }
+            for apr in aprs
+        ],
+    }
+
+
+async def _persist_inspection(
+    item: SyncItemRequest,
+    user: UserModel,
+    session: AsyncSession,
+    storage: ReportStorage,
+) -> InspectionModel:
+    payload = item.payload
+    vehicle_id = payload.get("vehicleId")
+    if vehicle_id and user.role == "TECNICO":
+        assigned_vehicle = await session.scalar(
+            select(VehicleModel).where(
+                VehicleModel.id == vehicle_id,
+                VehicleModel.assigned_technician_id == user.id,
+            )
+        )
+        if not assigned_vehicle:
+            raise HTTPException(
+                status_code=403,
+                detail="O veículo informado não está atribuído ao técnico autenticado.",
+            )
+
+    inspection = InspectionModel(
+        client_generated_id=item.id,
+        template_id=str(payload.get("templateId") or payload.get("id") or ""),
+        template_version=str(payload.get("templateVersion") or "1"),
+        title=str(payload.get("title") or "Inspeção operacional"),
+        vehicle_id=vehicle_id,
+        vehicle_plate=payload.get("vehiclePlate"),
+        vehicle_model=payload.get("vehicleModel"),
+        technician_id=user.id,
+        technician_name=user.full_name,
+        status="COMPLETED",
+        notes=payload.get("notes"),
+        completed_at=_parse_datetime(
+            payload.get("completedAt") or item.createdAt
+        ),
+    )
+    session.add(inspection)
+    await session.flush()
+
+    questions = payload.get("questions") or []
+    answers = payload.get("answers") or {}
+    question_by_id = {
+        str(question.get("id")): question
+        for question in questions
+        if question.get("id")
+    }
+    for question_id, answer in answers.items():
+        session.add(
+            InspectionAnswerModel(
+                inspection_id=inspection.id,
+                question_id=str(question_id),
+                answer_value=str(answer),
+            )
+        )
+        if answer != "NAO_CONFORME":
+            continue
+        question = question_by_id.get(str(question_id), {})
+        category = str(question.get("category") or "Geral")
+        session.add(
+            IncidentModel(
+                code=(
+                    f"NC-{datetime.now(UTC).strftime('%Y%m')}-"
+                    f"{uuid4().hex[:8].upper()}"
+                ),
+                inspection_id=inspection.id,
+                inspection_title=inspection.title,
+                context_type="VEHICLE" if vehicle_id else "INDIVIDUAL",
+                vehicle_plate=inspection.vehicle_plate,
+                vehicle_model=inspection.vehicle_model,
+                technician_name=user.full_name,
+                team_name=user.team_name or "Sem equipe",
+                category=category,
+                question_text=str(
+                    question.get("questionText")
+                    or question.get("text")
+                    or "Item não conforme"
+                ),
+                severity=(
+                    "ALTA"
+                    if any(
+                        term in category.lower()
+                        for term in ("pneu", "freio", "segurança")
+                    )
+                    else "MEDIA"
+                ),
+                status="ABERTA",
+                description="Detectado automaticamente na inspeção mobile.",
+            )
+        )
+
+    for evidence in payload.get("evidences") or []:
+        data_url = evidence.get("dataUrl")
+        if not data_url:
+            continue
+        content, content_type, extension = _decode_evidence(data_url)
+        evidence_id = str(evidence.get("id") or uuid4())
+        object_key = (
+            f"evidences/inspections/{inspection.id}/{evidence_id}.{extension}"
+        )
+        await storage.upload_bytes(content, object_key, content_type)
+        session.add(
+            EvidenceModel(
+                inspection_id=inspection.id,
+                photo_url=object_key,
+                captured_at=str(evidence.get("capturedAt") or item.createdAt),
+                latitude=evidence.get("latitude"),
+                longitude=evidence.get("longitude"),
+                description=evidence.get("description"),
+                content_type=content_type,
+                sha256=hashlib.sha256(content).hexdigest(),
+            )
+        )
+    return inspection
 
 
 @router.post(
     "/sync",
     response_model=SyncBatchResponse,
-    summary="Recepção e conciliação idempotente de vistorias offline",
+    summary="Recepção e conciliação idempotente de registros offline",
 )
-async def sync_offline_inspections(batch: SyncBatchRequest) -> SyncBatchResponse:
-    results: List[SyncItemResult] = []
+async def sync_offline_inspections(
+    batch: SyncBatchRequest,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    storage: ReportStorage = Depends(get_report_storage),
+) -> SyncBatchResponse:
+    results: list[SyncItemResult] = []
     synced_count = 0
 
     for item in batch.items:
-        client_uuid = item.id
-
-        if client_uuid in processed_uuids:
-            results.append(
-                SyncItemResult(
-                    id=client_uuid,
-                    status="SYNCED",
-                    message="Registro já reconciliado anteriormente (Idempotente).",
+        try:
+            if item.entityType == "APR":
+                existing_apr = await session.scalar(
+                    select(AprAssessmentModel).where(
+                        AprAssessmentModel.client_generated_id == item.id
+                    )
                 )
-            )
-        else:
-            processed_uuids.add(client_uuid)
-            synced_count += 1
-            
-            # Autocreate incidents for NAO_CONFORME
-            if item.entityType == "INSPECTION" and item.payload:
-                answers = item.payload.get("answers", {})
-                questions = item.payload.get("questions", [])
-                title = item.payload.get("title", "Inspeção Offline")
-                
-                context = item.payload.get("context", {})
-                vehicle_plate = context.get("plate", "N/A")
-                vehicle_model = context.get("model", "N/A")
-                technician_name = context.get("technicianName", "Desconhecido")
-                team_name = context.get("teamName", "Geral")
-                
-                q_dict = {q.get("id"): q for q in questions}
-                
-                async with AsyncSessionLocal() as session:
-                    import random
-                    for q_id, ans in answers.items():
-                        if ans == "NAO_CONFORME":
-                            q_data = q_dict.get(q_id, {})
-                            question_text = q_data.get("questionText", "Item Inconforme")
-                            category = q_data.get("category", "Geral")
-                            
-                            new_incident = IncidentModel(
-                                code=f"NC-{datetime.now(timezone.utc).strftime('%Y%m')}-{random.randint(1000, 9999)}",
-                                inspection_id=client_uuid,
-                                inspection_title=title,
-                                context_type="VEHICLE",
-                                vehicle_plate=vehicle_plate,
-                                vehicle_model=vehicle_model,
-                                technician_name=technician_name,
-                                team_name=team_name,
-                                category=category,
-                                question_text=question_text,
-                                severity="ALTA" if "pneu" in category.lower() or "freio" in category.lower() else "MEDIA",
-                                status="ABERTA",
-                                description="Detectado automaticamente via sincronização de vistoria mobile."
-                            )
-                            session.add(new_incident)
-                    
+                if existing_apr:
+                    message = "APR já sincronizada anteriormente."
+                else:
+                    apr_payload = dict(item.payload)
+                    apr_payload["clientGeneratedId"] = item.id
+                    await create_apr(
+                        CreateAprRequest.model_validate(apr_payload), session
+                    )
+                    synced_count += 1
+                    message = "APR sincronizada e enviada para autorização."
+            elif item.entityType in {"INSPECTION", "VEHICLE_CHECKLIST"}:
+                existing_inspection = await session.scalar(
+                    select(InspectionModel).where(
+                        InspectionModel.client_generated_id == item.id
+                    )
+                )
+                if existing_inspection:
+                    message = (
+                        "Vistoria já sincronizada anteriormente (Idempotente)."
+                    )
+                else:
+                    await _persist_inspection(item, user, session, storage)
                     await session.commit()
-
-            results.append(
-                SyncItemResult(
-                    id=client_uuid,
-                    status="SYNCED",
-                    message="Vistoria sincronizada e gravada com sucesso.",
+                    synced_count += 1
+                    message = "Vistoria sincronizada e persistida com sucesso."
+            else:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Tipo de registro não suportado: {item.entityType}.",
                 )
+            results.append(
+                SyncItemResult(id=item.id, status="SYNCED", message=message)
             )
+        except HTTPException:
+            await session.rollback()
+            raise
+        except Exception as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail=f"Não foi possível sincronizar o registro {item.id}.",
+            ) from exc
 
     return SyncBatchResponse(syncedCount=synced_count, results=results)
 
@@ -191,6 +509,8 @@ async def sync_offline_inspections(batch: SyncBatchRequest) -> SyncBatchResponse
 async def generate_report(
     inspection_id: str,
     request: GenerateInspectionReportRequest,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
     storage_service: ReportStorage = Depends(get_report_storage),
 ) -> InspectionReportResponse:
     report_data = InspectionReportData(
@@ -233,7 +553,7 @@ async def generate_report(
     )
     pdf_content = generate_inspection_report(report_data)
     report_id = str(uuid4())
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC)
     object_key = f"reports/inspections/{inspection_id}/{report_id}.pdf"
     digest = hashlib.sha256(pdf_content).hexdigest()
 
@@ -243,19 +563,26 @@ async def generate_report(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="O laudo foi gerado, mas o armazenamento de documentos está indisponível.",
+            detail="O laudo foi gerado, mas o armazenamento está indisponível.",
         ) from exc
 
-    response = InspectionReportResponse(
-        reportId=report_id,
-        inspectionId=inspection_id,
-        objectKey=object_key,
+    report = InspectionReportModel(
+        id=report_id,
+        inspection_id=inspection_id,
+        object_key=object_key,
         sha256=digest,
-        generatedAt=generated_at,
+        generated_by=user.full_name,
+    )
+    session.add(report)
+    await session.commit()
+    return InspectionReportResponse(
+        reportId=report.id,
+        inspectionId=report.inspection_id,
+        objectKey=report.object_key,
+        sha256=report.sha256,
+        generatedAt=generated_at.isoformat(),
         downloadUrl=download_url,
     )
-    generated_reports[report_id] = response
-    return response
 
 
 @router.get(
@@ -263,8 +590,19 @@ async def generate_report(
     response_model=InspectionReportResponse,
     summary="Consulta dos metadados de um laudo oficial",
 )
-async def get_report(report_id: str) -> InspectionReportResponse:
-    report = generated_reports.get(report_id)
+async def get_report(
+    report_id: str,
+    session: AsyncSession = Depends(get_db),
+    storage_service: ReportStorage = Depends(get_report_storage),
+) -> InspectionReportResponse:
+    report = await session.get(InspectionReportModel, report_id)
     if report is None:
         raise HTTPException(status_code=404, detail="Laudo não encontrado.")
-    return report
+    return InspectionReportResponse(
+        reportId=report.id,
+        inspectionId=report.inspection_id,
+        objectKey=report.object_key,
+        sha256=report.sha256,
+        generatedAt=report.created_at.isoformat(),
+        downloadUrl=await storage_service.generate_download_url(report.object_key),
+    )

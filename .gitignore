@@ -76,6 +76,8 @@ dist/
 web-build/
 *.tsbuildinfo
 apps/mobile/bundle.js
+/apps/mobile/credentials.json
+/apps/mobile/*service-account*.json
 
 # Docker & Infrastructure
 infrastructure/data/

@@ -1,0 +1,138 @@
+name: Mobile Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      distribute:
+        description: "Enviar o APK para o Firebase App Distribution"
+        required: true
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "mobile-v*"
+
+concurrency:
+  group: mobile-android-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: mobile-preview
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      EXPO_PUBLIC_API_URL: https://app.gsfmcloud.tech/api/v1
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+      FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+      FIREBASE_TESTER_GROUP: ${{ secrets.FIREBASE_TESTER_GROUP }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.4"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate TypeScript
+        run: npm run typecheck
+
+      - name: Validate Expo dependencies
+        run: npx --yes expo-doctor@latest
+
+      - name: Validate stable Android signing configuration
+        if: (github.event_name == 'push' || inputs.distribute) && (env.ANDROID_KEYSTORE_BASE64 == '' || env.ANDROID_KEYSTORE_PASSWORD == '' || env.ANDROID_KEY_ALIAS == '' || env.ANDROID_KEY_PASSWORD == '')
+        run: |
+          echo "::error::Configure os quatro secrets ANDROID_KEYSTORE_* no ambiente mobile-preview antes de gerar um APK instalável."
+          exit 1
+
+      - name: Generate Android project
+        env:
+          CI: "1"
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build standalone release APK
+        env:
+          NODE_ENV: production
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Prepare APK
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk dist/NexusOps-Mobile.apk
+
+      - name: Sign APK with the stable release key
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          mkdir -p .ci-secrets
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > .ci-secrets/nexusops-release.jks
+          BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS_DIR/zipalign" -p -f 4 \
+            dist/NexusOps-Mobile.apk \
+            dist/NexusOps-Mobile-aligned.apk
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks .ci-secrets/nexusops-release.jks \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --out dist/NexusOps-Mobile-signed.apk \
+            dist/NexusOps-Mobile-aligned.apk
+          mv dist/NexusOps-Mobile-signed.apk dist/NexusOps-Mobile.apk
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs dist/NexusOps-Mobile.apk
+
+      - name: Upload APK artifact
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexusops-mobile-${{ github.run_number }}
+          path: apps/mobile/dist/NexusOps-Mobile.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Validate Firebase configuration
+        if: (github.event_name == 'push' || inputs.distribute) && (env.FIREBASE_APP_ID == '' || env.FIREBASE_SERVICE_ACCOUNT_BASE64 == '' || env.ANDROID_KEYSTORE_BASE64 == '')
+        run: |
+          echo "::error::Firebase ou assinatura Android não configurados nos secrets do ambiente mobile-preview."
+          exit 1
+
+      - name: Distribute to Firebase testers
+        if: (github.event_name == 'push' || inputs.distribute) && env.FIREBASE_APP_ID != '' && env.FIREBASE_SERVICE_ACCOUNT_BASE64 != '' && env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/apps/mobile/.ci-secrets/firebase-service-account.json
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_BASE64" | base64 --decode > .ci-secrets/firebase-service-account.json
+          npx --yes firebase-tools@latest appdistribution:distribute dist/NexusOps-Mobile.apk \
+            --app "$FIREBASE_APP_ID" \
+            --groups "${FIREBASE_TESTER_GROUP:-tecnicos}" \
+            --release-notes "NexusOps Mobile ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf .ci-secrets

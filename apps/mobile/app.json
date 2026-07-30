@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "NexusOps Mobile",
-    "slug": "nexusops-mobile",
+    "slug": "cross",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,9 +26,9 @@
       },
       "package": "com.nexusops.mobile",
       "permissions": [
-        "CAMERA",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -40,7 +40,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "O NexusOps usa a câmera para registrar evidências das inspeções."
+          "cameraPermission": "O NexusOps usa a câmera para registrar evidências das inspeções.",
+          "microphonePermission": false
         }
       ],
       [
@@ -49,6 +50,12 @@
           "locationWhenInUsePermission": "O NexusOps usa a localização para validar evidências registradas em campo."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "797900ff-cc49-444c-a9da-a51db9b73632"
+      }
+    },
+    "owner": "crossconnection"
   }
 }

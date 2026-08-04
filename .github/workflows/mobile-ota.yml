@@ -1,0 +1,62 @@
+name: Mobile OTA Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Resumo da atualização enviada aos técnicos"
+        required: true
+        type: string
+
+concurrency:
+  group: mobile-ota-preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish preview update
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: mobile-preview
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      EXPO_PUBLIC_API_URL: https://app.gsfmcloud.tech/api/v1
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      UPDATE_MESSAGE: ${{ inputs.message }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.4"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate TypeScript
+        run: npm run typecheck
+
+      - name: Validate Expo token
+        if: env.EXPO_TOKEN == ''
+        run: |
+          echo "::error::Configure o secret EXPO_TOKEN antes de publicar atualizações OTA."
+          exit 1
+
+      - name: Publish update to preview
+        env:
+          NODE_ENV: production
+        run: >
+          npx --yes eas-cli@latest update
+          --channel preview
+          --message "$UPDATE_MESSAGE"
+          --non-interactive

@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "build:apk": "npx eas-cli build --platform android --profile preview"
+    "build:apk": "npx eas-cli build --platform android --profile preview",
+    "update:preview": "npx eas-cli update --channel preview"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -26,6 +27,7 @@
     "expo-secure-store": "~15.0.7",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.19",
     "memoize-one": "^5.2.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",

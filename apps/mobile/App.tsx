@@ -19,6 +19,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { TamaguiProvider } from "tamagui";
 
 import tamaguiConfig from "./tamagui.config";
+import { checkForAppUpdate } from "./src/services/appUpdates";
 import { AllChecklistsScreen } from "./src/screens/AllChecklistsScreen";
 import { AprDetailScreen } from "./src/screens/AprDetailScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
@@ -118,6 +119,12 @@ function MobileApp() {
     };
     void restore();
   }, [loadContext, updatePendingSyncCount]);
+
+  useEffect(() => {
+    if (!booting) {
+      void checkForAppUpdate();
+    }
+  }, [booting]);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((networkState) => {

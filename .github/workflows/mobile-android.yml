@@ -79,9 +79,19 @@ jobs:
         env:
           NODE_ENV: production
         run: |
+          
           chmod +x android/gradlew
           cd android
           ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Configure Gradle memory
+        run: |
+          cat >> android/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          kotlin.daemon.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=768m
+          org.gradle.workers.max=2
+          org.gradle.parallel=false
+          EOF
 
       - name: Prepare APK
         run: |

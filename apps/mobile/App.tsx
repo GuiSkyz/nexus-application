@@ -114,6 +114,7 @@ function MobileApp() {
           setUsingOfflineCache(true);
         }
       }
+      await SyncOrchestrator.triggerSyncWorker();
       await updatePendingSyncCount();
       setBooting(false);
     };
@@ -156,11 +157,27 @@ function MobileApp() {
     setSelectedChecklist(null);
   };
 
-  const handleSaveSuccess = async (savedItemId: string) => {
-    setHighlightSyncId(savedItemId);
+  const handleSaveSuccess = async (savedItemId: string, requiresLaterSync: boolean) => {
+    if (selectedChecklist) {
+      setContext((current) => current ? {
+        ...current,
+        checklists: current.checklists.map((item) => item.id === selectedChecklist.id ? {
+          ...item,
+          state: "COMPLETED",
+          completedAt: new Date().toISOString(),
+        } : item),
+      } : current);
+    }
     setSelectedChecklist(null);
-    setIsSyncQueueOpen(true);
+    setHighlightSyncId(requiresLaterSync ? savedItemId : undefined);
+    setIsSyncQueueOpen(requiresLaterSync);
     await updatePendingSyncCount();
+    if (!requiresLaterSync) await loadContext();
+  };
+
+  const openChecklist = (checklist: ContextualChecklist | null) => {
+    if (!checklist || checklist.state === "COMPLETED") return;
+    setSelectedChecklist(checklist);
   };
 
   const inspection: Inspection | null =
@@ -220,13 +237,13 @@ function MobileApp() {
             user={user}
             vehicle={context?.vehicles[0]}
             onBack={() => setSelectedChecklist(null)}
-            onSaveSuccess={(id) => void handleSaveSuccess(id)}
+            onSaveSuccess={(id, requiresLaterSync) => void handleSaveSuccess(id, requiresLaterSync)}
           />
         ) : inspection ? (
           <InspectionDetailScreen
             inspection={inspection}
             onBack={() => setSelectedChecklist(null)}
-            onSaveSuccess={(id) => void handleSaveSuccess(id)}
+            onSaveSuccess={(id, requiresLaterSync) => void handleSaveSuccess(id, requiresLaterSync)}
           />
         ) : (
           <>
@@ -244,25 +261,21 @@ function MobileApp() {
                   pendingSyncCount={pendingSyncCount}
                   onRefresh={loadContext}
                   onNavigateTab={setActiveTab}
-                  onOpenChecklist={(id) =>
-                    setSelectedChecklist(
-                      context?.checklists.find((item) => item.id === id) || null,
-                    )
-                  }
+                  onOpenChecklist={(id) => openChecklist(context?.checklists.find((item) => item.id === id) || null)}
                 />
               )}
               {activeTab === "MY_TASKS" && (
                 <MyTasksScreen
                   checklists={context?.checklists || []}
                   vehicles={context?.vehicles || []}
-                  onOpenChecklist={setSelectedChecklist}
+                  onOpenChecklist={openChecklist}
                 />
               )}
               {activeTab === "ACTION_PLANS" && <ActionPlansScreen />}
               {activeTab === "ALL_CHECKLISTS" && (
                 <AllChecklistsScreen
                   checklists={context?.checklists || []}
-                  onOpenChecklist={setSelectedChecklist}
+                  onOpenChecklist={openChecklist}
                 />
               )}
               {activeTab === "HISTORY" && (

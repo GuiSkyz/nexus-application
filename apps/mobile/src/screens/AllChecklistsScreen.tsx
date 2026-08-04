@@ -83,19 +83,21 @@ export const AllChecklistsScreen: React.FC<AllChecklistsScreenProps> = ({
           filtered.map((item) => (
             <TouchableOpacity
               key={item.id}
-              style={styles.card}
-              onPress={() => onOpenChecklist(item)}
+              style={[styles.card, item.state === "COMPLETED" && styles.cardCompleted]}
+              onPress={() => item.state !== "COMPLETED" && onOpenChecklist(item)}
+              disabled={item.state === "COMPLETED"}
               accessibilityRole="button"
-              accessibilityLabel={`Abrir ${item.title}`}
+              accessibilityState={{ disabled: item.state === "COMPLETED" }}
+              accessibilityLabel={item.state === "COMPLETED" ? `${item.title}, concluído hoje` : `Abrir ${item.title}`}
             >
               <View style={styles.copy}>
                 <Text style={styles.category}>{item.category}</Text>
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 <Text style={styles.meta}>
-                  Versão {item.templateVersion} · {item.questions.length} itens
+                  {item.state === "COMPLETED" ? "Concluído hoje · disponível amanhã" : `Versão ${item.templateVersion} · ${item.questions.length} itens`}
                 </Text>
               </View>
-              <ChevronRight size={20} color={colors.blue[600]} />
+              {item.state === "COMPLETED" ? <View style={styles.completedBadge}><Text style={styles.completedText}>CONCLUÍDO</Text></View> : <ChevronRight size={20} color={colors.blue[600]} />}
             </TouchableOpacity>
           ))
         )}
@@ -137,6 +139,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[3],
     ...shadow.sm,
   },
+  cardCompleted: { backgroundColor: colors.surface.subtle, opacity: 0.78 },
   copy: { flex: 1 },
   category: { color: colors.blue[600], fontSize: 10, fontWeight: "800" },
   cardTitle: {
@@ -146,6 +149,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   meta: { color: colors.text.secondary, fontSize: 11, marginTop: 3 },
+  completedBadge: { backgroundColor: colors.success.soft, borderRadius: radius.sm, paddingHorizontal: 7, paddingVertical: 4 },
+  completedText: { color: colors.success.foreground, fontSize: 9, fontWeight: "800" },
   empty: { alignItems: "center", padding: spacing[7] },
   emptyTitle: {
     color: colors.text.primary,

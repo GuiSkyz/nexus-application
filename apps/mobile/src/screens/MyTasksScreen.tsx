@@ -64,13 +64,16 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({
         ) : (
           tasks.map((item) => {
             const Icon = iconFor(item.contextType);
+            const completedToday = item.state === "COMPLETED";
             return (
               <TouchableOpacity
                 key={item.id}
-                style={styles.task}
-                onPress={() => onOpenChecklist(item)}
+                style={[styles.task, completedToday && styles.taskCompleted]}
+                onPress={() => !completedToday && onOpenChecklist(item)}
+                disabled={completedToday}
                 accessibilityRole="button"
-                accessibilityLabel={`Abrir ${item.title}`}
+                accessibilityState={{ disabled: completedToday }}
+                accessibilityLabel={completedToday ? `${item.title}, concluído hoje` : `Abrir ${item.title}`}
               >
                 <View style={styles.iconBox}>
                   <Icon size={20} color={colors.blue[600]} />
@@ -86,10 +89,10 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({
                   </View>
                   <Text style={styles.taskTitle}>{item.title}</Text>
                   <Text style={styles.meta}>
-                    {item.questions.length} itens · {item.estimatedMinutes} min
+                    {completedToday ? "Concluído hoje · disponível amanhã" : `${item.questions.length} itens · ${item.estimatedMinutes} min`}
                   </Text>
                 </View>
-                <ChevronRight size={20} color={colors.text.secondary} />
+                {completedToday ? <View style={styles.completedBadge}><Text style={styles.completedText}>CONCLUÍDO</Text></View> : <ChevronRight size={20} color={colors.text.secondary} />}
               </TouchableOpacity>
             );
           })
@@ -136,6 +139,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[3],
     ...shadow.sm,
   },
+  taskCompleted: { backgroundColor: colors.surface.subtle, opacity: 0.78 },
   iconBox: {
     width: 42,
     height: 42,
@@ -165,6 +169,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   meta: { color: colors.text.secondary, fontSize: 11, marginTop: 3 },
+  completedBadge: { backgroundColor: colors.success.soft, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 4 },
+  completedText: { color: colors.success.foreground, fontSize: 8, fontWeight: "800" },
   empty: {
     alignItems: "center",
     padding: spacing[6],

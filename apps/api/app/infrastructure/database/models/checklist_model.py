@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import String, Integer, Boolean, ForeignKey, Text
+from sqlalchemy import String, Integer, Boolean, ForeignKey, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.infrastructure.database.base import Base
 
@@ -67,6 +67,7 @@ class ChecklistQuestionModel(Base):
     is_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     require_photo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     require_justification: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    options: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list, nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     section: Mapped["ChecklistSectionModel"] = relationship("ChecklistSectionModel", back_populates="questions")

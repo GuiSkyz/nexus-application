@@ -64,15 +64,30 @@ export interface ActivityContext {
   address: string;
 }
 
-export type ChecklistAnswerValue = "CONFORME" | "NAO_CONFORME" | "NA";
+export type ChecklistAnswerValue = string | string[];
+
+export type ChecklistQuestionType =
+  | "yes_no"
+  | "yes_no_na"
+  | "text"
+  | "textarea"
+  | "number"
+  | "single_choice"
+  | "multiple_choice"
+  | "photo"
+  | "signature"
+  | "date"
+  | "time";
 
 export interface ChecklistQuestion {
   id: string;
   category: string;
   questionText: string;
+  type: ChecklistQuestionType;
   isRequired: boolean;
   requirePhoto?: boolean;
   requireJustification?: boolean;
+  options?: Array<{ id: string; label: string }>;
 }
 
 export interface EvidencePhoto {
@@ -116,6 +131,7 @@ export interface ContextualChecklist {
   isRequired: boolean;
   state: ChecklistExecutionState;
   estimatedMinutes: number;
+  completedAt?: string;
   questions: ChecklistQuestion[];
   answers: Record<string, ChecklistAnswerValue>;
   evidences: EvidencePhoto[];

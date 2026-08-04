@@ -147,6 +147,20 @@ function BuilderContent() {
     }));
   };
 
+  const updateQuestionType = (sectionId: string, question: ChecklistQuestion, type: QuestionType) => {
+    const needsOptions = type === "single_choice" || type === "multiple_choice";
+    const defaults = [
+      { id: "option-1", label: "Opção 1" },
+      { id: "option-2", label: "Opção 2" },
+    ];
+    updateQuestion(sectionId, question.id, {
+      type,
+      options: needsOptions ? (question.options?.length ? question.options : defaults) : undefined,
+      // Uma pergunta cuja própria resposta é foto não precisa de uma segunda foto obrigatória.
+      requirePhoto: type === "photo" ? false : question.requirePhoto,
+    });
+  };
+
   const removeQuestion = (sectionId: string, questionId: string) => {
     setTemplate((prev) => ({
       ...prev,
@@ -329,6 +343,12 @@ function BuilderContent() {
                         [ Campo de Assinatura Touch / Digital ]
                       </div>
                     )}
+                    {["date", "time"].includes(q.type) && <input disabled type={q.type} className="w-48 p-2 bg-white border rounded text-xs" />}
+                    {["single_choice", "multiple_choice"].includes(q.type) && (
+                      <div className="space-y-2">
+                        {(q.options || []).map((option) => <label key={option.id} className="flex items-center gap-2"><input disabled type={q.type === "multiple_choice" ? "checkbox" : "radio"} />{option.label}</label>)}
+                      </div>
+                    )}
 
                     <div className="flex gap-3 text-[10px] text-slate-400 pt-1">
                       {q.requirePhoto && <span>• Exige Foto</span>}
@@ -437,7 +457,7 @@ function BuilderContent() {
                           <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tipo de Resposta</label>
                           <select
                             value={q.type}
-                            onChange={(e) => updateQuestion(sec.id, q.id, { type: e.target.value as QuestionType })}
+                            onChange={(e) => updateQuestionType(sec.id, q, e.target.value as QuestionType)}
                             className="w-full p-2 border rounded bg-white text-xs outline-none"
                           >
                             {questionTypes.map((qt) => (
@@ -463,7 +483,7 @@ function BuilderContent() {
                         </div>
 
                         {/* Toggle Exigir Foto */}
-                        <div className="flex items-center gap-2 pt-4">
+                        {q.type !== "photo" && <div className="flex items-center gap-2 pt-4">
                           <input
                             type="checkbox"
                             id={`photo-${q.id}`}
@@ -474,7 +494,7 @@ function BuilderContent() {
                           <label htmlFor={`photo-${q.id}`} className="text-xs font-medium text-slate-700 cursor-pointer">
                             Exigir Foto Comprovatória
                           </label>
-                        </div>
+                        </div>}
 
                         {/* Toggle Exigir Justificativa */}
                         <div className="flex items-center gap-2 pt-4">
@@ -490,6 +510,43 @@ function BuilderContent() {
                           </label>
                         </div>
                       </div>
+
+                      {(q.type === "single_choice" || q.type === "multiple_choice") && (
+                        <div className="rounded-md border border-blue-100 bg-blue-50/50 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-800">Opções de resposta</p>
+                              <p className="text-[11px] text-slate-500">Estas opções aparecerão para o técnico.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => updateQuestion(sec.id, q.id, { options: [...(q.options || []), { id: `option-${Date.now()}`, label: `Opção ${(q.options?.length || 0) + 1}` }] })}
+                              className="text-xs font-semibold text-blue-700 hover:text-blue-900"
+                            >
+                              + Adicionar opção
+                            </button>
+                          </div>
+                          {(q.options || []).map((option, optionIndex) => (
+                            <div key={option.id} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={option.label}
+                                onChange={(e) => updateQuestion(sec.id, q.id, { options: (q.options || []).map((item, index) => index === optionIndex ? { ...item, label: e.target.value } : item) })}
+                                className="flex-1 p-2 text-xs border rounded bg-white outline-none focus:border-blue-600"
+                                aria-label={`Opção ${optionIndex + 1}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateQuestion(sec.id, q.id, { options: (q.options || []).filter((_, index) => index !== optionIndex) })}
+                                className="p-1 text-red-600 hover:text-red-800"
+                                aria-label={`Excluir opção ${optionIndex + 1}`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
 

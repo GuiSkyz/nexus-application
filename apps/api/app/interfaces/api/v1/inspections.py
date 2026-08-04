@@ -3,9 +3,10 @@
 import base64
 import binascii
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,6 +43,15 @@ from app.infrastructure.minio.report_storage import get_report_storage
 from app.interfaces.api.v1.apr import CreateAprRequest, create_apr
 
 router = APIRouter(prefix="/inspections", tags=["Inspeções & Sincronização"])
+FIELD_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+
+
+def _today_bounds() -> tuple[datetime, datetime]:
+    """Return the current field-day interval in UTC for consistent daily locks."""
+    local_now = datetime.now(FIELD_TIMEZONE)
+    start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start.astimezone(UTC), end.astimezone(UTC)
 
 
 class SyncItemRequest(BaseModel):
@@ -199,6 +209,14 @@ async def get_mobile_context(
         .limit(50)
     )
     inspections = inspection_result.scalars().all()
+    today_start, tomorrow_start = _today_bounds()
+    completed_template_ids_today = {
+        inspection.template_id
+        for inspection in inspections
+        if inspection.status == "COMPLETED"
+        and inspection.completed_at is not None
+        and today_start <= inspection.completed_at < tomorrow_start
+    }
 
     apr_result = await session.execute(
         select(AprAssessmentModel)
@@ -253,7 +271,22 @@ async def get_mobile_context(
                     )
                 ),
                 "isRequired": checklist.id in assigned_template_ids,
-                "state": "PENDING",
+                "state": (
+                    "COMPLETED"
+                    if checklist.id in completed_template_ids_today
+                    else "PENDING"
+                ),
+                "completedAt": next(
+                    (
+                        inspection.completed_at.isoformat()
+                        for inspection in inspections
+                        if inspection.template_id == checklist.id
+                        and inspection.status == "COMPLETED"
+                        and inspection.completed_at is not None
+                        and today_start <= inspection.completed_at < tomorrow_start
+                    ),
+                    None,
+                ),
                 "estimatedMinutes": max(
                     5,
                     sum(
@@ -267,11 +300,13 @@ async def get_mobile_context(
                         "id": question.id,
                         "category": section.title,
                         "questionText": question.question_text,
+                        "type": question.type,
                         "isRequired": question.is_required,
                         "requirePhoto": question.require_photo,
                         "requireJustification": (
                             question.require_justification
                         ),
+                        "options": question.options or [],
                     }
                     for section in sorted(
                         checklist.sections, key=lambda item: item.order
@@ -323,6 +358,7 @@ async def _persist_inspection(
     storage: ReportStorage,
 ) -> InspectionModel:
     payload = item.payload
+    template_id = str(payload.get("templateId") or payload.get("id") or "")
     vehicle_id = payload.get("vehicleId")
     if vehicle_id and user.role == "TECNICO":
         assigned_vehicle = await session.scalar(
@@ -337,9 +373,25 @@ async def _persist_inspection(
                 detail="O veículo informado não está atribuído ao técnico autenticado.",
             )
 
+    today_start, tomorrow_start = _today_bounds()
+    completed_today = await session.scalar(
+        select(InspectionModel.id).where(
+            InspectionModel.technician_id == user.id,
+            InspectionModel.template_id == template_id,
+            InspectionModel.status == "COMPLETED",
+            InspectionModel.completed_at >= today_start,
+            InspectionModel.completed_at < tomorrow_start,
+        )
+    )
+    if completed_today:
+        raise HTTPException(
+            status_code=409,
+            detail="Este checklist já foi concluído hoje e será liberado novamente amanhã.",
+        )
+
     inspection = InspectionModel(
         client_generated_id=item.id,
-        template_id=str(payload.get("templateId") or payload.get("id") or ""),
+        template_id=template_id,
         template_version=str(payload.get("templateVersion") or "1"),
         title=str(payload.get("title") or "Inspeção operacional"),
         vehicle_id=vehicle_id,

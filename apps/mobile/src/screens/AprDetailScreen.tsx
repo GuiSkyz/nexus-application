@@ -25,7 +25,7 @@ interface AprDetailScreenProps {
   user: MobileUser;
   vehicle?: MobileVehicle;
   onBack: () => void;
-  onSaveSuccess: (savedItemId: string) => void;
+  onSaveSuccess: (savedItemId: string, requiresLaterSync: boolean) => void;
 }
 
 interface AprRiskDraft {
@@ -170,8 +170,10 @@ export const AprDetailScreen: React.FC<AprDetailScreenProps> = ({
         canStartActivity: false,
       };
       const queued = await OfflineStorage.enqueueSyncItem("APR", payload);
-      void SyncOrchestrator.triggerSyncWorker();
-      onSaveSuccess(queued.id);
+      await SyncOrchestrator.triggerSyncWorker();
+      const queue = await OfflineStorage.getSyncQueue();
+      const savedStatus = queue.find((item) => item.id === queued.id)?.status;
+      onSaveSuccess(queued.id, savedStatus !== "SYNCED");
     } catch {
       Alert.alert(
         "Falha ao salvar",

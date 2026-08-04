@@ -17,11 +17,12 @@ import { getResponsivePaddingTop, getResponsivePaddingBottom } from "../theme/re
 import { Inspection, ChecklistAnswerValue, EvidencePhoto, ChecklistQuestion } from "../types";
 import { OfflineStorage } from "../services/offline/storage";
 import { SyncOrchestrator } from "../services/offline/syncQueue";
+import { SignaturePad } from "../components/SignaturePad";
 
 interface InspectionDetailScreenProps {
   inspection: Inspection;
   onBack: () => void;
-  onSaveSuccess: (savedItemId: string) => void;
+  onSaveSuccess: (savedItemId: string, requiresLaterSync: boolean) => void;
 }
 
 export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
@@ -39,20 +40,22 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
   const [activeCategory, setActiveCategory] = useState<string | null>(categories.length > 0 ? categories[0] : null);
 
   const totalQuestions = inspection.questions.length;
-  const answeredCount = Object.keys(answers).length;
+  const hasAnswer = (answer: ChecklistAnswerValue | undefined) =>
+    Array.isArray(answer) ? answer.length > 0 : Boolean(answer?.trim());
+  const answeredCount = inspection.questions.filter((question) => hasAnswer(answers[question.id])).length;
   const pendingCount = totalQuestions - answeredCount;
   const requiredAnswersComplete = inspection.questions.every(
-    (question) => !question.isRequired || Boolean(answers[question.id]),
+    (question) => !question.isRequired || hasAnswer(answers[question.id]),
   );
   const requiredPhotosComplete = inspection.questions.every(
     (question) =>
-      !question.requirePhoto ||
+      !(question.requirePhoto || question.type === "photo") ||
       evidences.some((evidence) => evidence.questionId === question.id),
   );
   const isComplete = requiredAnswersComplete && requiredPhotosComplete;
 
   // Verificar se há respostas "NÃO CONFORME"
-  const hasNonConformity = Object.values(answers).includes("NAO_CONFORME");
+  const hasNonConformity = Object.values(answers).some((answer) => answer === "NAO_CONFORME");
 
   const handleSelectAnswer = (questionId: string, value: ChecklistAnswerValue) => {
     setAnswers((prev) => ({
@@ -108,6 +111,50 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       description: `Evidência de campo · ${question.category}`,
     };
     setEvidences((current) => [...current, newEvidence]);
+    if (question.type === "photo") handleSelectAnswer(question.id, "PHOTO_ATTACHED");
+  };
+
+  const renderAnswerControl = (question: ChecklistQuestion) => {
+    const answer = answers[question.id];
+    const selected = (value: string) => answer === value;
+    const selectOption = (value: string) => {
+      if (question.type !== "multiple_choice") return handleSelectAnswer(question.id, value);
+      const current = Array.isArray(answer) ? answer : [];
+      handleSelectAnswer(question.id, current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+    };
+    const renderChoice = (label: string, value: string, style?: object, textStyle?: object) => (
+      <TouchableOpacity key={value} style={[styles.actionBtn, selected(value) && style]} onPress={() => handleSelectAnswer(question.id, value)} activeOpacity={0.7}>
+        <Text style={[styles.actionBtnText, selected(value) && textStyle]} numberOfLines={2}>{label}</Text>
+      </TouchableOpacity>
+    );
+
+    if (question.type === "yes_no" || question.type === "yes_no_na" || !question.type) {
+      return <View style={styles.actionButtonsRow}>
+        {renderChoice("Não conforme", "NAO_CONFORME", styles.actionBtnNokActive, styles.actionBtnTextNokActive)}
+        {renderChoice("Conforme", "CONFORME", styles.actionBtnOkActive, styles.actionBtnTextOkActive)}
+        {question.type !== "yes_no" && renderChoice("Não se aplica", "NA", styles.actionBtnNaActive, styles.actionBtnTextNaActive)}
+      </View>;
+    }
+    if (question.type === "photo") {
+      const attached = evidences.some((evidence) => evidence.questionId === question.id);
+      return <TouchableOpacity style={[styles.dashedPhotoBox, attached && styles.photoAttachedBox]} onPress={() => void handleAddPhoto(question)} activeOpacity={0.7}>
+        <View style={styles.photoIconContainer}><Text style={{ fontSize: 20 }}>📷</Text></View>
+        <View style={{ flex: 1 }}><Text style={styles.dashedPhotoTitle}>{attached ? "Foto adicionada" : "Adicionar foto de evidência"}</Text><Text style={styles.dashedPhotoSub}>Data, hora e GPS serão registrados</Text></View>
+        <View style={styles.takePhotoBtn}><Text style={styles.takePhotoBtnText}>{attached ? "Trocar" : "Tirar foto"}</Text></View>
+      </TouchableOpacity>;
+    }
+    if (question.type === "text" || question.type === "number" || question.type === "date" || question.type === "time") {
+      return <TextInput style={styles.answerInput} value={typeof answer === "string" ? answer : ""} onChangeText={(value) => handleSelectAnswer(question.id, value)} keyboardType={question.type === "number" ? "decimal-pad" : "default"} placeholder={question.type === "number" ? "Informe o valor" : question.type === "date" ? "DD/MM/AAAA" : question.type === "time" ? "HH:MM" : "Digite a resposta"} placeholderTextColor={colors.text.muted} />;
+    }
+    if (question.type === "textarea") return <TextInput style={[styles.answerInput, styles.textAreaInput]} multiline value={typeof answer === "string" ? answer : ""} onChangeText={(value) => handleSelectAnswer(question.id, value)} placeholder="Descreva a resposta" placeholderTextColor={colors.text.muted} />;
+    if (question.type === "signature") return <SignaturePad signerName={inspection.technicianName} onChange={(signature) => handleSelectAnswer(question.id, signature ? "SIGNED" : "")} />;
+
+    return <View style={styles.optionList}>{(question.options || []).map((option) => {
+      const checked = Array.isArray(answer) ? answer.includes(option.id) : answer === option.id;
+      return <TouchableOpacity key={option.id} style={[styles.optionButton, checked && styles.optionButtonSelected]} onPress={() => selectOption(option.id)} accessibilityRole={question.type === "multiple_choice" ? "checkbox" : "radio"} accessibilityState={{ checked }}>
+        <View style={[styles.optionIndicator, question.type === "multiple_choice" && styles.optionIndicatorSquare, checked && styles.optionIndicatorSelected]}>{checked && <Text style={styles.optionCheck}>✓</Text>}</View><Text style={styles.optionLabel}>{option.label}</Text>
+      </TouchableOpacity>;
+    })}</View>;
   };
 
   const handleSaveInspection = async () => {
@@ -124,10 +171,12 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       };
 
       const savedItem = await OfflineStorage.enqueueSyncItem("INSPECTION", payload);
-      void SyncOrchestrator.triggerSyncWorker();
+      await SyncOrchestrator.triggerSyncWorker();
+      const queue = await OfflineStorage.getSyncQueue();
+      const savedStatus = queue.find((item) => item.id === savedItem.id)?.status;
       
       setSaving(false);
-      onSaveSuccess(savedItem.id);
+      onSaveSuccess(savedItem.id, savedStatus !== "SYNCED");
     } catch (error) {
       setSaving(false);
       Alert.alert("Erro ao Salvar", "Ocorreu uma falha ao gravar a vistoria no dispositivo.");
@@ -218,7 +267,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
             const isCategoryActive = activeCategory === categoryName;
             
             // Quantidade respondida desta categoria
-            const catAnsweredCount = categoryQuestions.filter(q => answers[q.id]).length;
+            const catAnsweredCount = categoryQuestions.filter((q) => hasAnswer(answers[q.id])).length;
             const isCatComplete = catAnsweredCount === categoryQuestions.length;
 
             return (
@@ -245,9 +294,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                 {/* Corpo da Sanfona: Mostra apenas se estiver ativa */}
                 {isCategoryActive && categoryQuestions.map((q: ChecklistQuestion, index: number) => {
                   const currentAnswer = answers[q.id];
-                  const isSelectedOk = currentAnswer === "CONFORME";
                   const isSelectedNok = currentAnswer === "NAO_CONFORME";
-                  const isNA = currentAnswer === "NA";
 
                   return (
                     <View key={q.id} style={styles.questionCard}>
@@ -269,32 +316,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                         )}
                       </View>
 
-                      {/* Botões de Ação */}
-                      <View style={styles.actionButtonsRow}>
-                        <TouchableOpacity
-                          style={[styles.actionBtn, isSelectedNok && styles.actionBtnNokActive]}
-                          onPress={() => handleSelectAnswer(q.id, "NAO_CONFORME")}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[styles.actionBtnText, isSelectedNok && styles.actionBtnTextNokActive]}>Não conforme</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[styles.actionBtn, isSelectedOk && styles.actionBtnOkActive]}
-                          onPress={() => handleSelectAnswer(q.id, "CONFORME")}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[styles.actionBtnText, isSelectedOk && styles.actionBtnTextOkActive]}>Conforme</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[styles.actionBtn, isNA && styles.actionBtnNaActive]}
-                          onPress={() => handleSelectAnswer(q.id, "NA")}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[styles.actionBtnText, isNA && styles.actionBtnTextNaActive]}>N/A</Text>
-                        </TouchableOpacity>
-                      </View>
+                      {renderAnswerControl(q)}
 
                       {/* Alerta de NC se marcado Não */}
                       {isSelectedNok && (
@@ -305,23 +327,13 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                         </View>
                       )}
 
-                      {/* Box de Anexo de Foto Tracejado */}
-                      <TouchableOpacity
-                        style={styles.dashedPhotoBox}
-                        onPress={() => void handleAddPhoto(q)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.photoIconContainer}>
-                          <Text style={{ fontSize: 20 }}>📸</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.dashedPhotoTitle}>Adicionar evidência</Text>
-                          <Text style={styles.dashedPhotoSub}>Carimbo de data/hora incluso</Text>
-                        </View>
-                        <View style={styles.takePhotoBtn}>
-                          <Text style={styles.takePhotoBtnText}>Capturar</Text>
-                        </View>
-                      </TouchableOpacity>
+                      {q.type !== "photo" && q.requirePhoto && (
+                        <TouchableOpacity style={styles.dashedPhotoBox} onPress={() => void handleAddPhoto(q)} activeOpacity={0.7}>
+                          <View style={styles.photoIconContainer}><Text style={{ fontSize: 20 }}>📷</Text></View>
+                          <View style={{ flex: 1 }}><Text style={styles.dashedPhotoTitle}>Foto comprobatória obrigatória</Text><Text style={styles.dashedPhotoSub}>Data, hora e GPS serão registrados</Text></View>
+                          <View style={styles.takePhotoBtn}><Text style={styles.takePhotoBtnText}>Tirar foto</Text></View>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   );
                 })}
@@ -662,14 +674,18 @@ const styles = StyleSheet.create({
   },
   actionButtonsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: spacing[3],
     marginBottom: spacing[2],
   },
   actionBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 100,
+    flexGrow: 1,
+    flexBasis: 96,
+    minHeight: 52,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.md,
     backgroundColor: colors.surface.muted,
     alignItems: "center",
     justifyContent: "center",
@@ -680,6 +696,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: colors.text.secondary,
+    textAlign: "center",
   },
   actionBtnNokActive: {
     backgroundColor: colors.danger.soft,
@@ -725,6 +742,72 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: spacing[4],
+  },
+  photoAttachedBox: {
+    backgroundColor: colors.success.soft,
+    borderColor: colors.success.DEFAULT,
+  },
+  answerInput: {
+    minHeight: 52,
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[3],
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border.strong,
+    borderRadius: radius.md,
+    color: colors.text.primary,
+    fontSize: 14,
+    backgroundColor: colors.surface.card,
+  },
+  textAreaInput: {
+    minHeight: 104,
+    textAlignVertical: "top",
+  },
+  optionList: {
+    gap: spacing[2],
+    marginTop: spacing[3],
+  },
+  optionButton: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingHorizontal: spacing[3],
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface.subtle,
+  },
+  optionButtonSelected: {
+    borderColor: colors.blue[600],
+    backgroundColor: colors.blue[50],
+  },
+  optionIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.border.strong,
+  },
+  optionIndicatorSquare: {
+    borderRadius: radius.sm,
+  },
+  optionIndicatorSelected: {
+    borderColor: colors.blue[600],
+    backgroundColor: colors.blue[600],
+  },
+  optionCheck: {
+    color: colors.text.inverse,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  optionLabel: {
+    flex: 1,
+    color: colors.text.primary,
+    fontSize: 14,
+    fontWeight: "600",
   },
   photoIconContainer: {
     width: 40,

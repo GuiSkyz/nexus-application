@@ -33,8 +33,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const vehicle = context?.vehicles[0];
   const requiredChecklist =
+    context?.checklists.find((item) => item.isRequired && item.state !== "COMPLETED") ||
+    context?.checklists.find((item) => item.state !== "COMPLETED") ||
     context?.checklists.find((item) => item.isRequired) ||
     context?.checklists[0];
+  const isChecklistCompletedToday = requiredChecklist?.state === "COMPLETED";
 
   const refresh = async () => {
     setRefreshing(true);
@@ -112,17 +115,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {requiredChecklist && (
           <>
             <Text style={styles.meta}>
-              {requiredChecklist.questions.length} itens · aproximadamente{" "}
-              {requiredChecklist.estimatedMinutes} minutos
+              {isChecklistCompletedToday ? "Checklist concluído hoje. Nova liberação amanhã." : `${requiredChecklist.questions.length} itens · aproximadamente ${requiredChecklist.estimatedMinutes} minutos`}
             </Text>
             <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => onOpenChecklist(requiredChecklist.id)}
+              style={[styles.primaryButton, isChecklistCompletedToday && styles.primaryButtonCompleted]}
+              onPress={() => !isChecklistCompletedToday && onOpenChecklist(requiredChecklist.id)}
+              disabled={isChecklistCompletedToday}
               accessibilityRole="button"
-              accessibilityLabel={`Iniciar ${requiredChecklist.title}`}
+              accessibilityState={{ disabled: isChecklistCompletedToday }}
+              accessibilityLabel={isChecklistCompletedToday ? `${requiredChecklist.title}, concluído hoje` : `Iniciar ${requiredChecklist.title}`}
             >
-              <Text style={styles.primaryButtonText}>Iniciar checklist</Text>
-              <ArrowRight size={18} color={colors.text.inverse} />
+              <Text style={styles.primaryButtonText}>{isChecklistCompletedToday ? "Concluído hoje" : "Iniciar checklist"}</Text>
+              {!isChecklistCompletedToday && <ArrowRight size={18} color={colors.text.inverse} />}
             </TouchableOpacity>
           </>
         )}
@@ -233,6 +237,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: colors.blue[600],
   },
+  primaryButtonCompleted: { backgroundColor: colors.success.foreground },
   primaryButtonText: {
     color: colors.text.inverse,
     fontSize: 13,

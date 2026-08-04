@@ -26,6 +26,7 @@ class QuestionPayload(BaseModel):
     isRequired: bool = True
     requirePhoto: bool = False
     requireJustification: bool = False
+    options: list[dict[str, str]] = Field(default_factory=list)
     order: int = 1
 
 
@@ -105,6 +106,7 @@ def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
                         isRequired=question.is_required,
                         requirePhoto=question.require_photo,
                         requireJustification=question.require_justification,
+                        options=question.options or [],
                         order=question.order,
                     )
                     for question in section.questions
@@ -132,6 +134,7 @@ def _apply_sections(
                 is_required=question.isRequired,
                 require_photo=question.requirePhoto,
                 require_justification=question.requireJustification,
+                options=question.options,
                 order=question.order,
             )
             for question in section_data.questions
@@ -296,6 +299,7 @@ async def duplicate_checklist(
                         isRequired=question.is_required,
                         requirePhoto=question.require_photo,
                         requireJustification=question.require_justification,
+                        options=question.options or [],
                         order=question.order,
                     )
                     for question in section.questions

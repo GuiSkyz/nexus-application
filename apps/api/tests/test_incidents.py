@@ -25,6 +25,23 @@ async def test_create_action_plan_and_resolve(client: AsyncClient) -> None:
     assert data1["status"] == "PLANO_DE_ACAO"
     assert data1["actionPlan"]["assignedTo"] == "Oficina de Escadas Credenciada"
 
+    technician_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "tecnico1@example.com", "password": "TecnicoTeste123!"},
+    )
+    assert technician_login.status_code == 200
+    submitted = await client.post(
+        "/api/v1/incidents/NC-2026-085/submit-review",
+        json={"resolutionNotes": "Escada reparada e testada em campo."},
+    )
+    assert submitted.status_code == 200
+    assert submitted.json()["status"] == "EM_ANALISE"
+
+    master_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "master@nexusops.com", "password": "MasterTeste123!"},
+    )
+    assert master_login.status_code == 200
     resolve_req = {"resolutionNotes": "Escada reparada e laudo de carga aprovado."}
     res2 = await client.post("/api/v1/incidents/NC-2026-085/resolve", json=resolve_req)
     assert res2.status_code == 200

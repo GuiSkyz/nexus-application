@@ -73,6 +73,18 @@ class ResolveIncidentRequest(BaseModel):
     resolutionNotes: str = Field(min_length=3)
 
 
+class SubmitIncidentReviewRequest(BaseModel):
+    resolutionNotes: str = Field(min_length=3)
+
+
+def _ensure_management(user: UserModel) -> None:
+    if user.role == "TECNICO":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas a gestão pode aprovar ou devolver não conformidades.",
+        )
+
+
 def _action_plan_response(action_plan: ActionPlanModel) -> ActionPlanResponse:
     return ActionPlanResponse(
         id=action_plan.id,
@@ -208,7 +220,9 @@ async def create_action_plan(
     incident_code: str,
     request: CreateActionPlanRequest,
     session: AsyncSession = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
 ) -> IncidentResponse:
+    _ensure_management(user)
     result = await session.execute(
         _statement().where(IncidentModel.code == incident_code)
     )
@@ -237,22 +251,97 @@ async def create_action_plan(
     return _incident_response(incident)
 
 
-@router.post("/{incident_code}/resolve", response_model=IncidentResponse)
-async def resolve_incident(
+@router.post("/{incident_code}/submit-review", response_model=IncidentResponse)
+async def submit_incident_for_review(
     incident_code: str,
-    request: ResolveIncidentRequest,
+    request: SubmitIncidentReviewRequest,
     session: AsyncSession = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
 ) -> IncidentResponse:
+    if user.role != "TECNICO":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Este envio deve ser feito pelo técnico responsável.",
+        )
     result = await session.execute(
         _statement().where(IncidentModel.code == incident_code)
     )
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
+    if incident.technician_name != user.full_name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta não conformidade não está vinculada a você.",
+        )
+    if not incident.action_plans:
+        raise HTTPException(
+            status_code=409,
+            detail="Aguarde a gestão atribuir um plano de ação antes de enviar a correção.",
+        )
+    if incident.status != "PLANO_DE_ACAO":
+        raise HTTPException(
+            status_code=409,
+            detail="Esta não conformidade não está disponível para envio.",
+        )
+    incident.action_plans[0].resolution_notes = request.resolutionNotes
+    incident.action_plans[0].resolved_at = None
+    incident.status = "EM_ANALISE"
+    await session.commit()
+    await session.refresh(incident)
+    return _incident_response(incident)
+
+
+@router.post("/{incident_code}/resolve", response_model=IncidentResponse)
+async def resolve_incident(
+    incident_code: str,
+    request: ResolveIncidentRequest,
+    session: AsyncSession = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+) -> IncidentResponse:
+    _ensure_management(user)
+    result = await session.execute(
+        _statement().where(IncidentModel.code == incident_code)
+    )
+    incident = result.scalar_one_or_none()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
+    if incident.status != "EM_ANALISE":
+        raise HTTPException(
+            status_code=409,
+            detail="A correção precisa ser enviada pelo técnico antes da aprovação.",
+        )
     incident.status = "RESOLVIDA"
     if incident.action_plans:
         incident.action_plans[0].resolved_at = datetime.now(UTC).isoformat()
         incident.action_plans[0].resolution_notes = request.resolutionNotes
+    await session.commit()
+    await session.refresh(incident)
+    return _incident_response(incident)
+
+
+@router.post("/{incident_code}/reopen", response_model=IncidentResponse)
+async def reopen_incident(
+    incident_code: str,
+    request: ResolveIncidentRequest,
+    session: AsyncSession = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+) -> IncidentResponse:
+    _ensure_management(user)
+    result = await session.execute(
+        _statement().where(IncidentModel.code == incident_code)
+    )
+    incident = result.scalar_one_or_none()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
+    if incident.status != "EM_ANALISE" or not incident.action_plans:
+        raise HTTPException(
+            status_code=409,
+            detail="A não conformidade não possui uma correção em análise.",
+        )
+    incident.action_plans[0].resolution_notes = request.resolutionNotes
+    incident.action_plans[0].resolved_at = None
+    incident.status = "PLANO_DE_ACAO"
     await session.commit()
     await session.refresh(incident)
     return _incident_response(incident)

@@ -2,9 +2,12 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { ClipboardCheck } from "@tamagui/lucide-icons-2/icons/ClipboardCheck";
@@ -26,6 +29,9 @@ export function ActionPlansScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string>();
+  const [selected, setSelected] = useState<Incident>();
+  const [resolutionNotes, setResolutionNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -43,6 +49,21 @@ export function ActionPlansScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const submitForReview = async () => {
+    if (!selected || !resolutionNotes.trim()) return;
+    try {
+      setSubmitting(true);
+      await ApiService.submitIncidentForReview(selected.id, resolutionNotes.trim());
+      setSelected(undefined);
+      setResolutionNotes("");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível enviar a correção.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={colors.blue[600]} /></View>;
@@ -65,14 +86,26 @@ export function ActionPlansScreen() {
           const plan = item.actionPlan;
           const resolved = item.status === "RESOLVIDA" || Boolean(plan?.resolvedAt);
           const statusLabel = resolved ? "Concluído" : plan ? "Em andamento" : "Aberta";
-          return <View style={styles.card}>
+          return <Pressable style={styles.card} onPress={() => { setSelected(item); setResolutionNotes(""); }}>
             <View style={styles.cardTop}><Text style={styles.code}>{item.id}</Text><Text style={[styles.status, resolved ? styles.statusResolved : styles.statusOpen]}>{statusLabel}</Text></View>
             <Text style={styles.question}>{item.questionText}</Text>
             {plan ? <><Text style={styles.planLabel}>Ação corretiva</Text><Text style={styles.plan}>{plan.description}</Text><View style={styles.details}><Text style={styles.detail}>Responsável: {plan.assignedTo}</Text><View style={styles.deadline}><Clock3 size={14} color={colors.text.secondary} /><Text style={styles.detail}>Prazo: {new Date(plan.dueDate).toLocaleDateString("pt-BR")}</Text></View></View></> : <Text style={styles.waiting}>Aguardando definição do plano de ação pela supervisão.</Text>}
             <Text style={styles.severity}>Severidade: {severityLabels[item.severity]}</Text>
-          </View>;
+          </Pressable>;
         }}
       />
+      <Modal visible={Boolean(selected)} transparent animationType="slide" onRequestClose={() => setSelected(undefined)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Não conformidade {selected?.id}</Text>
+            <Text style={styles.modalQuestion}>{selected?.questionText}</Text>
+            {selected?.description ? <Text style={styles.modalText}>{selected.description}</Text> : null}
+            {selected?.actionPlan ? <><Text style={styles.planLabel}>Ação solicitada</Text><Text style={styles.modalText}>{selected.actionPlan.description}</Text><Text style={styles.detail}>Responsável: {selected.actionPlan.assignedTo}</Text></> : <Text style={styles.waiting}>A gestão ainda não atribuiu uma ação corretiva.</Text>}
+            {selected?.status === "PLANO_DE_ACAO" ? <><Text style={styles.planLabel}>Correção executada</Text><TextInput value={resolutionNotes} onChangeText={setResolutionNotes} multiline placeholder="Descreva a correção realizada e as evidências verificadas." placeholderTextColor={colors.text.muted} style={styles.notesInput} /><Pressable disabled={!resolutionNotes.trim() || submitting} onPress={() => void submitForReview()} style={[styles.submitButton, (!resolutionNotes.trim() || submitting) && styles.submitButtonDisabled]}><Text style={styles.submitButtonText}>{submitting ? "Enviando..." : "Enviar para aprovação"}</Text></Pressable></> : selected?.status === "EM_ANALISE" ? <Text style={styles.waiting}>Correção enviada. Aguarde a aprovação ou devolução pela supervisão.</Text> : selected?.status === "RESOLVIDA" ? <Text style={styles.approved}>Correção aprovada pela supervisão.</Text> : null}
+            <Pressable onPress={() => setSelected(undefined)} style={styles.closeButton}><Text style={styles.closeButtonText}>Fechar</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -99,8 +132,20 @@ const styles = StyleSheet.create({
   planLabel: { color: colors.text.secondary, fontSize: 11, fontWeight: "800", marginTop: 14 },
   plan: { color: colors.text.primary, fontSize: 13, lineHeight: 19, marginTop: 4 },
   waiting: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginTop: 14 },
+  approved: { color: colors.success.foreground, fontSize: 13, fontWeight: "700", lineHeight: 19, marginTop: 14 },
   details: { borderTopWidth: 1, borderTopColor: colors.border.default, gap: 6, marginTop: 14, paddingTop: 12 },
   detail: { color: colors.text.secondary, fontSize: 12 },
   deadline: { flexDirection: "row", alignItems: "center", gap: 5 },
   severity: { color: colors.text.muted, fontSize: 11, fontWeight: "600", marginTop: 12 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(6, 31, 74, 0.5)", justifyContent: "flex-end" },
+  modal: { backgroundColor: colors.surface.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing[5], gap: 10 },
+  modalTitle: { color: colors.blue[600], fontSize: 12, fontWeight: "800" },
+  modalQuestion: { color: colors.text.primary, fontSize: 18, fontWeight: "800", lineHeight: 24 },
+  modalText: { color: colors.text.primary, fontSize: 14, lineHeight: 20 },
+  notesInput: { minHeight: 92, borderColor: colors.border.default, borderRadius: radius.md, borderWidth: 1, color: colors.text.primary, fontSize: 14, padding: spacing[3], textAlignVertical: "top" },
+  submitButton: { alignItems: "center", backgroundColor: colors.blue[600], borderRadius: radius.md, minHeight: 44, justifyContent: "center" },
+  submitButtonDisabled: { opacity: 0.5 },
+  submitButtonText: { color: colors.text.inverse, fontSize: 13, fontWeight: "800" },
+  closeButton: { alignItems: "center", borderColor: colors.border.default, borderRadius: radius.md, borderWidth: 1, minHeight: 44, justifyContent: "center", marginTop: 2 },
+  closeButtonText: { color: colors.text.primary, fontSize: 13, fontWeight: "800" },
 });

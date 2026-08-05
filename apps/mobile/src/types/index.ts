@@ -164,6 +164,7 @@ export interface ActionPlan {
   assignedTo: string;
   dueDate: string;
   resolvedAt?: string;
+  resolutionNotes?: string;
 }
 
 export interface Incident {
@@ -173,6 +174,7 @@ export interface Incident {
   severity: "CRITICA" | "ALTA" | "MEDIA" | "BAIXA";
   status: "ABERTA" | "EM_ANALISE" | "PLANO_DE_ACAO" | "RESOLVIDA" | "CANCELADA";
   actionPlan?: ActionPlan;
+  description?: string;
 }
 
 export interface MobileUser {

@@ -285,6 +285,13 @@ export class ApiClient {
     });
   }
 
+  static reopenIncident(id: string, data: object) {
+    return request<Incident>(`/incidents/${id}/reopen`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   static fetchTechnicians() {
     return request<Technician[]>("/technicians");
   }

@@ -117,6 +117,13 @@ export class ApiService {
     return request<Incident[]>("/incidents");
   }
 
+  static submitIncidentForReview(id: string, resolutionNotes: string): Promise<Incident> {
+    return request<Incident>(`/incidents/${id}/submit-review`, {
+      method: "POST",
+      body: JSON.stringify({ resolutionNotes }),
+    });
+  }
+
   static async getReadinessStatus(): Promise<ReadinessResponse> {
     try {
       return await request<ReadinessResponse>("/health/ready", {}, false);

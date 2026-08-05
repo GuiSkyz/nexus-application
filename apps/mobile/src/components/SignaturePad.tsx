@@ -24,9 +24,16 @@ interface SignatureSegment {
   angle: number;
 }
 
-const pointFromEvent = (event: GestureResponderEvent): SignaturePoint => ({
-  x: Math.max(0, event.nativeEvent.locationX),
-  y: Math.max(0, event.nativeEvent.locationY),
+const pointFromEvent = (
+  event: GestureResponderEvent,
+  origin: SignaturePoint
+): SignaturePoint => ({
+  // `locationX/Y` is relative to the view that received the touch. As the
+  // signature segments are rendered, that view can become a child segment
+  // instead of the pad itself. Page coordinates anchored on gesture start
+  // remain stable for the whole stroke.
+  x: Math.max(0, event.nativeEvent.pageX - origin.x),
+  y: Math.max(0, event.nativeEvent.pageY - origin.y),
 });
 
 const buildDataUrl = (strokes: SignatureStroke[]): string => {
@@ -51,6 +58,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
 }) => {
   const [strokes, setStrokes] = useState<SignatureStroke[]>([]);
   const strokesRef = useRef<SignatureStroke[]>([]);
+  const gestureOriginRef = useRef<SignaturePoint | null>(null);
 
   const publishSignature = (nextStrokes: SignatureStroke[]) => {
     strokesRef.current = nextStrokes;
@@ -74,20 +82,32 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (event) => {
+          const origin = {
+            x: event.nativeEvent.pageX - event.nativeEvent.locationX,
+            y: event.nativeEvent.pageY - event.nativeEvent.locationY,
+          };
+          gestureOriginRef.current = origin;
           publishSignature([
             ...strokesRef.current,
-            { points: [pointFromEvent(event)] },
+            { points: [pointFromEvent(event, origin)] },
           ]);
         },
         onPanResponderMove: (event) => {
           const current = strokesRef.current;
-          if (current.length === 0) return;
+          const origin = gestureOriginRef.current;
+          if (current.length === 0 || !origin) return;
           const next = current.map((stroke, index) =>
             index === current.length - 1
-              ? { points: [...stroke.points, pointFromEvent(event)] }
+              ? { points: [...stroke.points, pointFromEvent(event, origin)] }
               : stroke
           );
           publishSignature(next);
+        },
+        onPanResponderRelease: () => {
+          gestureOriginRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          gestureOriginRef.current = null;
         },
       }),
     [signerName]
@@ -121,6 +141,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
         {segments.map((segment) => (
           <View
             key={segment.key}
+            pointerEvents="none"
             style={[
               styles.segment,
               {
@@ -133,7 +154,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
           />
         ))}
         {segments.length === 0 && (
-          <Text style={styles.placeholder}>
+          <Text pointerEvents="none" style={styles.placeholder}>
             Assine com o dedo dentro desta área
           </Text>
         )}

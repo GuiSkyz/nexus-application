@@ -14,6 +14,10 @@ import { AuditInspectionDetail, AuditInspectionSummary } from "@/types/audit";
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
+export function apiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -203,6 +207,14 @@ export class ApiClient {
 
   static fetchAuditInspection(id: string) {
     return request<AuditInspectionDetail>(`/inspections/audit/${id}`);
+  }
+
+  static createAuditNonconformity(id: string, description: string, severity: string) {
+    return request<{ code: string }>(`/inspections/audit/${id}/nonconformity`, { method: "POST", body: JSON.stringify({ description, severity }) });
+  }
+
+  static exportAuditPdf(id: string) {
+    return request<{ downloadUrl: string }>(`/inspections/audit/${id}/pdf`, { method: "POST" });
   }
 
   static fetchChecklist(id: string) {

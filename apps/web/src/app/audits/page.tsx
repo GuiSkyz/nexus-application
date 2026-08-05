@@ -14,7 +14,7 @@ export default function AuditsPage() {
 
   useEffect(() => { ApiClient.fetchAuditInspections().then(setItems).finally(() => setLoading(false)); }, []);
   const visible = items.filter((item) => `${item.title} ${item.technicianName} ${item.vehiclePlate || ""}`.toLowerCase().includes(query.toLowerCase()));
-  const open = async (id: string) => setSelected(await ApiClient.fetchAuditInspection(id));
+  const open = (id: string) => { window.location.href = `/audits/${id}`; };
 
   return <><AppHeader pageTitle="Auditoria de checklists" breadcrumb={["Operacional", "Auditoria"]} />
     <main className="space-y-5 p-6">

@@ -33,3 +33,6 @@ class ReportStorage(Protocol):
 
     async def generate_download_url(self, object_key: str) -> str:
         ...
+
+    async def download_bytes(self, object_key: str) -> tuple[bytes, str]:
+        ...

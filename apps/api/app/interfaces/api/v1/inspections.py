@@ -9,6 +9,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -169,6 +170,15 @@ class AuditInspectionDetail(AuditInspectionSummary):
     evidences: list[AuditEvidence]
 
 
+class AuditNonconformityRequest(BaseModel):
+    description: str = Field(min_length=3)
+    severity: str = "MEDIA"
+
+
+class AuditPdfResponse(BaseModel):
+    downloadUrl: str
+
+
 def _parse_datetime(value: str | None) -> datetime:
     if not value:
         return datetime.now(UTC)
@@ -238,7 +248,6 @@ async def get_audit_inspection(
     inspection_id: str,
     user: UserModel = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-    storage: ReportStorage = Depends(get_report_storage),
 ) -> AuditInspectionDetail:
     _ensure_audit_access(user)
     result = await session.execute(
@@ -282,9 +291,148 @@ async def get_audit_inspection(
             for answer in item.answers
         ],
         evidences=[
-            AuditEvidence(id=evidence.id, photoUrl=await storage.generate_download_url(evidence.photo_url), capturedAt=evidence.captured_at, description=evidence.description)
+            AuditEvidence(
+                id=evidence.id,
+                photoUrl=f"/inspections/audit/{item.id}/evidences/{evidence.id}",
+                capturedAt=evidence.captured_at,
+                description=evidence.description,
+            )
             for evidence in item.evidences
         ],
+    )
+
+
+@router.get("/audit/{inspection_id}/evidences/{evidence_id}")
+async def get_audit_evidence(
+    inspection_id: str,
+    evidence_id: str,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    storage: ReportStorage = Depends(get_report_storage),
+) -> Response:
+    """Entrega a foto via API para manter o MinIO privado na VPS."""
+    _ensure_audit_access(user)
+    evidence = await session.get(EvidenceModel, evidence_id)
+    if not evidence or evidence.inspection_id != inspection_id:
+        raise HTTPException(status_code=404, detail="Evidência fotográfica não encontrada.")
+    content, content_type = await storage.download_bytes(evidence.photo_url)
+    return Response(content=content, media_type=content_type)
+
+
+@router.post("/audit/{inspection_id}/nonconformity")
+async def create_audit_nonconformity(
+    inspection_id: str,
+    payload: AuditNonconformityRequest,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    _ensure_audit_access(user)
+    inspection = await session.get(InspectionModel, inspection_id)
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Checklist preenchido não encontrado.")
+    incident = IncidentModel(
+        code=f"NC-{datetime.now(UTC).year}-{uuid4().hex[:8].upper()}",
+        inspection_id=inspection.id,
+        inspection_title=inspection.title,
+        context_type="AUDIT",
+        vehicle_plate=inspection.vehicle_plate,
+        vehicle_model=inspection.vehicle_model,
+        technician_name=inspection.technician_name,
+        team_name="Auditoria",
+        question_text="Divergência identificada na auditoria",
+        category="Auditoria de checklist",
+        severity=payload.severity,
+        status="ABERTA",
+        description=payload.description,
+    )
+    session.add(incident)
+    await session.commit()
+    return {"code": incident.code}
+
+
+@router.post("/audit/{inspection_id}/pdf", response_model=AuditPdfResponse)
+async def export_audit_pdf(
+    inspection_id: str,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    storage: ReportStorage = Depends(get_report_storage),
+) -> AuditPdfResponse:
+    _ensure_audit_access(user)
+    result = await session.execute(
+        select(InspectionModel).options(selectinload(InspectionModel.answers), selectinload(InspectionModel.evidences)).where(InspectionModel.id == inspection_id)
+    )
+    inspection = result.scalar_one_or_none()
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Checklist preenchido não encontrado.")
+    template_result = await session.execute(
+        select(ChecklistTemplateModel)
+        .options(
+            selectinload(ChecklistTemplateModel.sections).selectinload(
+                ChecklistSectionModel.questions
+            )
+        )
+        .where(ChecklistTemplateModel.id == inspection.template_id)
+    )
+    template = template_result.scalar_one_or_none()
+    question_texts = {
+        question.id: question.question_text
+        for section in (template.sections if template else [])
+        for question in section.questions
+    }
+    content = generate_inspection_report(InspectionReportData(
+        inspection_id=inspection.id,
+        title=inspection.title,
+        technician_name=inspection.technician_name,
+        completed_at=(inspection.completed_at or inspection.created_at).isoformat(),
+        template_version=inspection.template_version,
+        vehicle_plate=inspection.vehicle_plate,
+        vehicle_model=inspection.vehicle_model,
+        notes=inspection.notes,
+        answers=[
+            ReportAnswer(
+                question=question_texts.get(answer.question_id, answer.question_id),
+                value=answer.answer_value,
+                notes=answer.notes,
+            )
+            for answer in inspection.answers
+        ],
+        evidences=[ReportEvidence(description=evidence.description or "Evidência fotográfica", captured_at=evidence.captured_at, latitude=evidence.latitude, longitude=evidence.longitude) for evidence in inspection.evidences],
+    ))
+    report_id = str(uuid4())
+    object_key = f"reports/audits/{inspection.id}/{report_id}.pdf"
+    await storage.upload_pdf(content, object_key)
+    report = InspectionReportModel(
+        id=report_id,
+        inspection_id=inspection.id,
+        object_key=object_key,
+        sha256=hashlib.sha256(content).hexdigest(),
+        generated_by=user.full_name,
+    )
+    session.add(report)
+    await session.commit()
+    return AuditPdfResponse(
+        downloadUrl=f"/inspections/audit/{inspection.id}/reports/{report.id}/download"
+    )
+
+
+@router.get("/audit/{inspection_id}/reports/{report_id}/download")
+async def download_audit_pdf(
+    inspection_id: str,
+    report_id: str,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    storage: ReportStorage = Depends(get_report_storage),
+) -> Response:
+    """Baixa o PDF pela API, sem publicar o MinIO."""
+    _ensure_audit_access(user)
+    report = await session.get(InspectionReportModel, report_id)
+    if not report or report.inspection_id != inspection_id:
+        raise HTTPException(status_code=404, detail="Relatório de auditoria não encontrado.")
+    content, content_type = await storage.download_bytes(report.object_key)
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="checklist-{inspection_id}.pdf"'},
     )
 
 

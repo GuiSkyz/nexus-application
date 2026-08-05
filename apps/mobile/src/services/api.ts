@@ -9,10 +9,16 @@ import {
 } from "../types";
 import { SessionService } from "./session";
 
-const defaultBaseUrl =
+const localBaseUrl =
   Platform.OS === "web"
     ? "http://localhost:8000/api/v1"
     : "http://10.0.2.2:8000/api/v1";
+
+// Atualizações OTA não herdam as variáveis de ambiente de perfis de build.
+// Em uma versão instalada, nunca devemos usar o host reservado ao emulador.
+const defaultBaseUrl = __DEV__
+  ? localBaseUrl
+  : "https://app.gsfmcloud.tech/api/v1";
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || defaultBaseUrl;
 

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { ClipboardCheck } from "@tamagui/lucide-icons-2/icons/ClipboardCheck";
 import { Clock3 } from "@tamagui/lucide-icons-2/icons/Clock3";
+import * as ImagePicker from "expo-image-picker";
 
 import { ApiService } from "../services/api";
 import { Incident } from "../types";
@@ -32,6 +33,7 @@ export function ActionPlansScreen() {
   const [selected, setSelected] = useState<Incident>();
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [evidenceDataUrl, setEvidenceDataUrl] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -51,18 +53,27 @@ export function ActionPlansScreen() {
   }, [load]);
 
   const submitForReview = async () => {
-    if (!selected || !resolutionNotes.trim()) return;
+    if (!selected || !resolutionNotes.trim() || !evidenceDataUrl) return;
     try {
       setSubmitting(true);
-      await ApiService.submitIncidentForReview(selected.id, resolutionNotes.trim());
+      await ApiService.submitIncidentForReview(selected.id, resolutionNotes.trim(), evidenceDataUrl);
       setSelected(undefined);
       setResolutionNotes("");
+      setEvidenceDataUrl("");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível enviar a correção.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const captureEvidence = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) { setError("Permita o uso da câmera para anexar a evidência."); return; }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.65, base64: true });
+    const asset = result.assets?.[0];
+    if (!result.canceled && asset?.base64) setEvidenceDataUrl(`data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`);
   };
 
   if (loading) {
@@ -86,7 +97,7 @@ export function ActionPlansScreen() {
           const plan = item.actionPlan;
           const resolved = item.status === "RESOLVIDA" || Boolean(plan?.resolvedAt);
           const statusLabel = resolved ? "Concluído" : plan ? "Em andamento" : "Aberta";
-          return <Pressable style={styles.card} onPress={() => { setSelected(item); setResolutionNotes(""); }}>
+          return <Pressable style={styles.card} onPress={() => { setSelected(item); setResolutionNotes(""); setEvidenceDataUrl(""); }}>
             <View style={styles.cardTop}><Text style={styles.code}>{item.id}</Text><Text style={[styles.status, resolved ? styles.statusResolved : styles.statusOpen]}>{statusLabel}</Text></View>
             <Text style={styles.question}>{item.questionText}</Text>
             {plan ? <><Text style={styles.planLabel}>Ação corretiva</Text><Text style={styles.plan}>{plan.description}</Text><View style={styles.details}><Text style={styles.detail}>Responsável: {plan.assignedTo}</Text><View style={styles.deadline}><Clock3 size={14} color={colors.text.secondary} /><Text style={styles.detail}>Prazo: {new Date(plan.dueDate).toLocaleDateString("pt-BR")}</Text></View></View></> : <Text style={styles.waiting}>Aguardando definição do plano de ação pela supervisão.</Text>}
@@ -101,7 +112,7 @@ export function ActionPlansScreen() {
             <Text style={styles.modalQuestion}>{selected?.questionText}</Text>
             {selected?.description ? <Text style={styles.modalText}>{selected.description}</Text> : null}
             {selected?.actionPlan ? <><Text style={styles.planLabel}>Ação solicitada</Text><Text style={styles.modalText}>{selected.actionPlan.description}</Text><Text style={styles.detail}>Responsável: {selected.actionPlan.assignedTo}</Text></> : <Text style={styles.waiting}>A gestão ainda não atribuiu uma ação corretiva.</Text>}
-            {selected?.status === "PLANO_DE_ACAO" ? <><Text style={styles.planLabel}>Correção executada</Text><TextInput value={resolutionNotes} onChangeText={setResolutionNotes} multiline placeholder="Descreva a correção realizada e as evidências verificadas." placeholderTextColor={colors.text.muted} style={styles.notesInput} /><Pressable disabled={!resolutionNotes.trim() || submitting} onPress={() => void submitForReview()} style={[styles.submitButton, (!resolutionNotes.trim() || submitting) && styles.submitButtonDisabled]}><Text style={styles.submitButtonText}>{submitting ? "Enviando..." : "Enviar para aprovação"}</Text></Pressable></> : selected?.status === "EM_ANALISE" ? <Text style={styles.waiting}>Correção enviada. Aguarde a aprovação ou devolução pela supervisão.</Text> : selected?.status === "RESOLVIDA" ? <Text style={styles.approved}>Correção aprovada pela supervisão.</Text> : null}
+            {selected?.status === "PLANO_DE_ACAO" ? <><Text style={styles.planLabel}>Correção executada</Text><TextInput value={resolutionNotes} onChangeText={setResolutionNotes} multiline placeholder="Descreva a correção realizada." placeholderTextColor={colors.text.muted} style={styles.notesInput} /><Pressable onPress={() => void captureEvidence()} style={styles.photoButton}><Text style={styles.photoButtonText}>{evidenceDataUrl ? "Foto anexada ✓" : "Anexar foto da correção"}</Text></Pressable><Pressable disabled={!resolutionNotes.trim() || !evidenceDataUrl || submitting} onPress={() => void submitForReview()} style={[styles.submitButton, (!resolutionNotes.trim() || !evidenceDataUrl || submitting) && styles.submitButtonDisabled]}><Text style={styles.submitButtonText}>{submitting ? "Enviando..." : "Enviar para aprovação"}</Text></Pressable></> : selected?.status === "EM_ANALISE" ? <Text style={styles.waiting}>Correção enviada. Aguarde a aprovação ou devolução pela supervisão.</Text> : selected?.status === "RESOLVIDA" ? <Text style={styles.approved}>Correção aprovada pela supervisão.</Text> : null}
             <Pressable onPress={() => setSelected(undefined)} style={styles.closeButton}><Text style={styles.closeButtonText}>Fechar</Text></Pressable>
           </View>
         </View>
@@ -146,6 +157,8 @@ const styles = StyleSheet.create({
   submitButton: { alignItems: "center", backgroundColor: colors.blue[600], borderRadius: radius.md, minHeight: 44, justifyContent: "center" },
   submitButtonDisabled: { opacity: 0.5 },
   submitButtonText: { color: colors.text.inverse, fontSize: 13, fontWeight: "800" },
+  photoButton: { alignItems: "center", borderColor: colors.blue[600], borderRadius: radius.md, borderWidth: 1, minHeight: 44, justifyContent: "center" },
+  photoButtonText: { color: colors.blue[600], fontSize: 13, fontWeight: "800" },
   closeButton: { alignItems: "center", borderColor: colors.border.default, borderRadius: radius.md, borderWidth: 1, minHeight: 44, justifyContent: "center", marginTop: 2 },
   closeButtonText: { color: colors.text.primary, fontSize: 13, fontWeight: "800" },
 });

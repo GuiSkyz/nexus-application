@@ -117,10 +117,10 @@ export class ApiService {
     return request<Incident[]>("/incidents");
   }
 
-  static submitIncidentForReview(id: string, resolutionNotes: string): Promise<Incident> {
+  static submitIncidentForReview(id: string, resolutionNotes: string, evidenceDataUrl: string): Promise<Incident> {
     return request<Incident>(`/incidents/${id}/submit-review`, {
       method: "POST",
-      body: JSON.stringify({ resolutionNotes }),
+      body: JSON.stringify({ resolutionNotes, evidenceDataUrl }),
     });
   }
 

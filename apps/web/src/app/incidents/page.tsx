@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, Edit, Plus, Search, Trash2, Wrench } from 
 
 import { AppHeader } from "@/components/nexus/app-header";
 import { useRole } from "@/components/nexus/role-selector";
-import { ApiClient } from "@/lib/apiClient";
+import { apiUrl, ApiClient } from "@/lib/apiClient";
 import { Incident } from "@/types/incident";
 import { Technician } from "@/types/technician";
 
@@ -140,6 +140,7 @@ export default function IncidentsPage() {
                     {incident.actionPlan ? <>
                       <p className="font-semibold text-text-primary">{incident.actionPlan.description}</p>
                       <p className="mt-1">Responsável: {incident.actionPlan.assignedTo} · Prazo: {new Date(incident.actionPlan.dueDate).toLocaleString("pt-BR")}</p>
+                      {incident.actionPlan.evidencePhotoUrl && <a href={apiUrl(incident.actionPlan.evidencePhotoUrl)} target="_blank" rel="noreferrer" className="mt-1 inline-block font-semibold text-nexus-blue-700">Ver foto enviada</a>}
                     </> : "Sem plano atribuído"}
                   </div>
                   <div className="flex gap-2">
@@ -164,7 +165,7 @@ export default function IncidentsPage() {
           <form onSubmit={saveIncident} className="w-full max-w-2xl space-y-4 rounded-xl bg-white p-6 shadow-overlay">
             <h2 className="text-base font-bold text-text-primary">{editing.id ? "Editar não conformidade" : "Registrar não conformidade"}</h2>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Técnico cadastrado"><select required value={editing.technicianId || ""} onChange={(e) => setEditing({ ...editing, technicianId: e.target.value })}><option value="">Selecione o técnico responsável</option>{technicians.map((technician) => <option key={technician.id} value={technician.id}>{technician.fullName} · {technician.employeeCode || "Sem matrícula"}</option>)}</select></Field>
+              <Field label="Técnico cadastrado"><select required value={editing.technicianId || ""} onChange={(e) => setEditing({ ...editing, technicianId: e.target.value })}><option value="">Selecione o técnico responsável</option>{technicians.map((technician) => <option key={technician.id} value={technician.id}>{technician.fullName}</option>)}</select></Field>
               <Field label="Equipe"><input readOnly value={selectedTechnician?.teamName || editing.teamName || "Definida pelo cadastro"} className="bg-surface-muted text-text-secondary" /></Field>
               <Field label="Categoria"><input required value={editing.category || ""} onChange={(e) => setEditing({ ...editing, category: e.target.value })} /></Field>
               <Field label="Severidade"><select value={editing.severity} onChange={(e) => setEditing({ ...editing, severity: e.target.value as Incident["severity"] })}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></Field>

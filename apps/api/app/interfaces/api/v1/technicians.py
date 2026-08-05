@@ -18,7 +18,7 @@ class TechnicianBasePayload(BaseModel):
 
     fullName: str = Field(min_length=3, max_length=255)
     email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    employeeCode: str = Field(min_length=2, max_length=50)
+    employeeCode: str | None = Field(default=None, min_length=2, max_length=50)
     phone: str | None = None
     teamName: str | None = None
     specialty: str | None = None
@@ -84,22 +84,18 @@ async def create_technician(
 ) -> TechnicianResponse:
     if payload.operationalCategory not in OPERATIONAL_CATEGORIES:
         raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
-    duplicate = await session.scalar(
-        select(UserModel).where(
-            or_(
-                UserModel.email == payload.email.lower(),
-                UserModel.employee_code == payload.employeeCode.upper(),
-            )
-        )
-    )
+    duplicate_filters = [UserModel.email == payload.email.lower()]
+    if payload.employeeCode:
+        duplicate_filters.append(UserModel.employee_code == payload.employeeCode.upper())
+    duplicate = await session.scalar(select(UserModel).where(or_(*duplicate_filters)))
     if duplicate:
         raise HTTPException(
-            status_code=409, detail="E-mail ou matrícula já está em uso."
+            status_code=409, detail="E-mail já está em uso."
         )
     user = UserModel(
         full_name=payload.fullName.strip(),
         email=payload.email.lower(),
-        employee_code=payload.employeeCode.upper(),
+        employee_code=payload.employeeCode.upper() if payload.employeeCode else None,
         phone=payload.phone,
         team_name=payload.teamName,
         specialty=payload.specialty,
@@ -123,24 +119,21 @@ async def update_technician(
     user = await session.get(UserModel, technician_id)
     if not user or user.role != "TECNICO":
         raise HTTPException(status_code=404, detail="Técnico não encontrado.")
+    duplicate_filters = [UserModel.email == payload.email.lower()]
+    if payload.employeeCode:
+        duplicate_filters.append(UserModel.employee_code == payload.employeeCode.upper())
     duplicate = await session.scalar(
-        select(UserModel).where(
-            UserModel.id != technician_id,
-            or_(
-                UserModel.email == payload.email.lower(),
-                UserModel.employee_code == payload.employeeCode.upper(),
-            ),
-        )
+        select(UserModel).where(UserModel.id != technician_id, or_(*duplicate_filters))
     )
     if duplicate:
         raise HTTPException(
-            status_code=409, detail="E-mail ou matrícula já está em uso."
+            status_code=409, detail="E-mail já está em uso."
         )
     if payload.operationalCategory not in OPERATIONAL_CATEGORIES:
         raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     user.full_name = payload.fullName.strip()
     user.email = payload.email.lower()
-    user.employee_code = payload.employeeCode.upper()
+    user.employee_code = payload.employeeCode.upper() if payload.employeeCode else None
     user.phone = payload.phone
     user.team_name = payload.teamName
     user.specialty = payload.specialty

@@ -43,5 +43,6 @@ class ActionPlanModel(Base):
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     resolved_at: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     resolution_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evidence_photo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     incident: Mapped["IncidentModel"] = relationship("IncidentModel", back_populates="action_plans")

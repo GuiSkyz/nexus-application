@@ -10,7 +10,6 @@ import { Technician, TechnicianPayload } from "@/types/technician";
 const empty: Partial<TechnicianPayload> = {
   fullName: "",
   email: "",
-  employeeCode: "",
   phone: "",
   teamName: "",
   specialty: "",
@@ -37,7 +36,7 @@ export default function TechniciansPage() {
 
   const visible = useMemo(() => {
     const search = query.toLowerCase();
-    return technicians.filter((item) => !search || `${item.fullName} ${item.email} ${item.employeeCode} ${item.teamName}`.toLowerCase().includes(search));
+    return technicians.filter((item) => !search || `${item.fullName} ${item.email} ${item.teamName}`.toLowerCase().includes(search));
   }, [query, technicians]);
 
   const save = async (event: FormEvent) => {
@@ -68,13 +67,13 @@ export default function TechniciansPage() {
         </section>
         <label className="relative block">
           <Search className="absolute left-3 top-3 h-4 w-4 text-text-muted" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar técnico, matrícula ou equipe" className="h-10 w-full rounded-md border bg-white pl-9 pr-3 text-sm" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar técnico, e-mail ou equipe" className="h-10 w-full rounded-md border bg-white pl-9 pr-3 text-sm" />
         </label>
         <section className="overflow-hidden rounded-xl border bg-white">
           {visible.length ? <div className="divide-y">{visible.map((item) => (
-            <article key={item.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_180px_180px_100px_auto] lg:items-center">
+            <article key={item.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_180px_100px_auto] lg:items-center">
               <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-nexus-blue-50 text-nexus-blue-700"><HardHat className="h-5 w-5" /></span><div><h2 className="text-sm font-bold text-text-primary">{item.fullName}</h2><p className="text-xs text-text-secondary">{item.email}</p></div></div>
-              <div className="text-xs"><p className="font-bold text-text-primary">{item.employeeCode || "Sem matrícula"}</p><p className="text-text-secondary">{item.phone || "Sem telefone"}</p></div>
+              <div className="text-xs"><p className="font-bold text-text-primary">{item.phone || "Sem telefone"}</p></div>
               <div className="text-xs"><p className="font-bold text-text-primary">{item.teamName || "Sem equipe"}</p><p className="text-text-secondary">{item.operationalCategory === "INFRAESTRUTURA" ? "Infraestrutura" : "Instalação & Manutenção"}</p></div>
               <span className={`justify-self-start rounded px-2 py-1 text-[10px] font-bold ${item.isActive ? "bg-success-soft text-success-foreground" : "bg-surface-muted text-text-secondary"}`}>{item.isActive ? "Ativo" : "Inativo"}</span>
               <div className="flex justify-end gap-1"><button onClick={() => setEditing({ ...item })} className="rounded p-2 text-text-secondary hover:bg-surface-muted"><Edit className="h-4 w-4" /></button><button onClick={() => window.confirm("Excluir este técnico?") && void ApiClient.deleteTechnician(item.id).then(load)} className="rounded p-2 text-text-secondary hover:bg-danger-soft hover:text-danger-foreground"><Trash2 className="h-4 w-4" /></button></div>
@@ -87,7 +86,6 @@ export default function TechniciansPage() {
         <h2 className="text-base font-bold">{editing.id ? "Editar técnico" : "Cadastrar técnico"}</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Nome completo"><input required value={editing.fullName || ""} onChange={(e) => setEditing({ ...editing, fullName: e.target.value })} /></Field>
-          <Field label="Matrícula"><input required value={editing.employeeCode || ""} onChange={(e) => setEditing({ ...editing, employeeCode: e.target.value })} /></Field>
           <Field label="E-mail corporativo"><input required type="email" value={editing.email || ""} onChange={(e) => setEditing({ ...editing, email: e.target.value })} /></Field>
           <Field label="Telefone"><input value={editing.phone || ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} /></Field>
           <Field label="Equipe"><input value={editing.teamName || ""} onChange={(e) => setEditing({ ...editing, teamName: e.target.value })} /></Field>

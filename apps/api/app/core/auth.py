@@ -67,6 +67,9 @@ async def enforce_rbac(
         can_view_own_incidents = method == "GET" and path.startswith(
             "/api/v1/incidents"
         )
+        can_submit_incident_review = method == "POST" and path.endswith(
+            "/submit-review"
+        )
         can_use_mobile_context = (
             method == "GET" and path == "/api/v1/inspections/mobile-context"
         )
@@ -76,6 +79,7 @@ async def enforce_rbac(
         if (
             can_view_vehicles
             or can_view_own_incidents
+            or can_submit_incident_review
             or can_use_mobile_context
             or can_sync_field_work
         ):
@@ -90,6 +94,7 @@ async def enforce_rbac(
         )
         can_manage_incident = method == "POST" and (
             path.endswith("/action-plan") or path.endswith("/resolve")
+            or path.endswith("/reopen")
         )
         can_sync_field_work = (
             method == "POST" and path == "/api/v1/inspections/sync"

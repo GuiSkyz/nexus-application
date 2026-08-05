@@ -1,16 +1,21 @@
 # ruff: noqa: N815
 
+import base64
+import binascii
 import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user
+from app.application.interfaces.storage import ReportStorage
 from app.infrastructure.database.models.incident_model import ActionPlanModel, IncidentModel
+from app.infrastructure.minio.report_storage import get_report_storage
 from app.infrastructure.database.session import get_db
 from app.infrastructure.database.models.user_model import UserModel
 
@@ -27,6 +32,7 @@ class ActionPlanResponse(BaseModel):
     createdBy: str
     resolvedAt: str | None = None
     resolutionNotes: str | None = None
+    evidencePhotoUrl: str | None = None
 
 
 class IncidentResponse(BaseModel):
@@ -77,6 +83,7 @@ class ResolveIncidentRequest(BaseModel):
 
 class SubmitIncidentReviewRequest(BaseModel):
     resolutionNotes: str = Field(min_length=3)
+    evidenceDataUrl: str = Field(min_length=20)
 
 
 def _ensure_management(user: UserModel) -> None:
@@ -87,7 +94,7 @@ def _ensure_management(user: UserModel) -> None:
         )
 
 
-def _action_plan_response(action_plan: ActionPlanModel) -> ActionPlanResponse:
+def _action_plan_response(action_plan: ActionPlanModel, incident_code: str) -> ActionPlanResponse:
     return ActionPlanResponse(
         id=action_plan.id,
         incidentId=action_plan.incident_id,
@@ -98,12 +105,13 @@ def _action_plan_response(action_plan: ActionPlanModel) -> ActionPlanResponse:
         createdBy=action_plan.created_by,
         resolvedAt=action_plan.resolved_at,
         resolutionNotes=action_plan.resolution_notes,
+        evidencePhotoUrl=(f"/incidents/{incident_code}/evidence" if action_plan.evidence_photo_url else None),
     )
 
 
 def _incident_response(incident: IncidentModel) -> IncidentResponse:
     plan = (
-        _action_plan_response(incident.action_plans[0])
+        _action_plan_response(incident.action_plans[0], incident.code)
         if incident.action_plans
         else None
     )
@@ -129,6 +137,22 @@ def _incident_response(incident: IncidentModel) -> IncidentResponse:
 
 def _statement():
     return select(IncidentModel).options(selectinload(IncidentModel.action_plans))
+
+
+@router.get("/{incident_code}/evidence")
+async def download_incident_evidence(
+    incident_code: str,
+    session: AsyncSession = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+    storage: ReportStorage = Depends(get_report_storage),
+) -> Response:
+    incident = await session.scalar(select(IncidentModel).where(IncidentModel.code == incident_code))
+    if user.role == "TECNICO" and incident and incident.technician_id != user.id:
+        raise HTTPException(status_code=403, detail="Sem acesso a esta evidência.")
+    if not incident or not incident.action_plans or not incident.action_plans[0].evidence_photo_url:
+        raise HTTPException(status_code=404, detail="Evidência da correção não encontrada.")
+    content, content_type = await storage.download_bytes(incident.action_plans[0].evidence_photo_url)
+    return Response(content=content, media_type=content_type)
 
 
 async def _registered_technician(session: AsyncSession, technician_id: str) -> UserModel:
@@ -274,6 +298,7 @@ async def submit_incident_for_review(
     request: SubmitIncidentReviewRequest,
     session: AsyncSession = Depends(get_db),
     user: UserModel = Depends(get_current_user),
+    storage: ReportStorage = Depends(get_report_storage),
 ) -> IncidentResponse:
     if user.role != "TECNICO":
         raise HTTPException(
@@ -301,7 +326,21 @@ async def submit_incident_for_review(
             status_code=409,
             detail="Esta não conformidade não está disponível para envio.",
         )
+    try:
+        header, encoded = request.evidenceDataUrl.split(",", 1)
+        content_type = header.split(";", 1)[0].replace("data:", "")
+        if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+            raise ValueError
+        photo = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise HTTPException(status_code=422, detail="Foto da correção inválida.") from exc
+    if len(photo) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="A foto deve ter no máximo 8 MB.")
+    extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[content_type]
+    object_key = f"evidences/incidents/{incident.id}/{uuid.uuid4()}.{extension}"
+    await storage.upload_bytes(photo, object_key, content_type)
     incident.action_plans[0].resolution_notes = request.resolutionNotes
+    incident.action_plans[0].evidence_photo_url = object_key
     incident.action_plans[0].resolved_at = None
     incident.status = "EM_ANALISE"
     await session.commit()

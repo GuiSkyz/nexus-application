@@ -8,6 +8,7 @@ export type UserRole =
 
 export type ChecklistStatus = "draft" | "published" | "archived";
 export type ChecklistDistributionScope = "CATEGORY" | "VEHICLE" | "INDIVIDUAL";
+export type ChecklistFrequency = "DAILY" | "WEEKLY" | "ON_DEMAND";
 
 export type QuestionType =
   | "yes_no"
@@ -46,6 +47,7 @@ export interface ChecklistTemplate {
   title: string;
   category: string;
   distributionScope: ChecklistDistributionScope;
+  frequency: ChecklistFrequency;
   description?: string;
   status: ChecklistStatus;
   version: number; // Ex: 1, 2, 3

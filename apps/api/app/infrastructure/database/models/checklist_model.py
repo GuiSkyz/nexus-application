@@ -19,6 +19,9 @@ class ChecklistTemplateModel(Base):
     distribution_scope: Mapped[str] = mapped_column(
         String(20), nullable=False, default="INDIVIDUAL"
     )
+    frequency: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="DAILY"
+    )
     description: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, comment="Descrição / Instruções do checklist"
     )

@@ -27,6 +27,7 @@ from app.application.services.inspection_report import (
 from app.core.auth import get_current_user
 from app.infrastructure.database.models.apr_model import AprAssessmentModel
 from app.infrastructure.database.models.checklist_model import (
+    ChecklistQuestionModel,
     ChecklistSectionModel,
     ChecklistTechnicianAssignmentModel,
     ChecklistTemplateModel,
@@ -171,6 +172,7 @@ class AuditInspectionDetail(AuditInspectionSummary):
 
 
 class AuditNonconformityRequest(BaseModel):
+    questionId: str = Field(min_length=1)
     description: str = Field(min_length=3)
     severity: str = "MEDIA"
 
@@ -330,6 +332,26 @@ async def create_audit_nonconformity(
     inspection = await session.get(InspectionModel, inspection_id)
     if not inspection:
         raise HTTPException(status_code=404, detail="Checklist preenchido não encontrado.")
+    answer = await session.scalar(
+        select(InspectionAnswerModel).where(
+            InspectionAnswerModel.inspection_id == inspection.id,
+            InspectionAnswerModel.question_id == payload.questionId,
+        )
+    )
+    if not answer:
+        raise HTTPException(
+            status_code=422,
+            detail="A questão selecionada não pertence a este checklist.",
+        )
+    question_result = await session.execute(
+        select(ChecklistQuestionModel.question_text)
+        .join(ChecklistSectionModel)
+        .where(
+            ChecklistSectionModel.template_id == inspection.template_id,
+            ChecklistQuestionModel.id == payload.questionId,
+        )
+    )
+    question_text = question_result.scalar_one_or_none() or payload.questionId
     incident = IncidentModel(
         code=f"NC-{datetime.now(UTC).year}-{uuid4().hex[:8].upper()}",
         inspection_id=inspection.id,
@@ -339,7 +361,7 @@ async def create_audit_nonconformity(
         vehicle_model=inspection.vehicle_model,
         technician_name=inspection.technician_name,
         team_name="Auditoria",
-        question_text="Divergência identificada na auditoria",
+        question_text=question_text,
         category="Auditoria de checklist",
         severity=payload.severity,
         status="ABERTA",
@@ -463,10 +485,6 @@ async def get_mobile_context(
     technician_template_ids = {
         assignment.template_id for assignment in technician_assignments
     }
-    technician_frequencies = {
-        assignment.template_id: assignment.frequency
-        for assignment in technician_assignments
-    }
     assigned_template_ids.update(technician_template_ids)
 
     checklist_result = await session.execute(
@@ -520,7 +538,7 @@ async def get_mobile_context(
 
     completion_at_by_template_id = {
         checklist.id: completion_in_current_period(
-            checklist.id, technician_frequencies.get(checklist.id, "DAILY")
+            checklist.id, checklist.frequency
         )
         for checklist in checklists
     }
@@ -581,7 +599,7 @@ async def get_mobile_context(
                     checklist.id in assigned_template_ids
                     or checklist.distribution_scope == "CATEGORY"
                 ),
-                "frequency": technician_frequencies.get(checklist.id, "DAILY"),
+                "frequency": checklist.frequency,
                 "state": (
                     "COMPLETED"
                     if completion_at_by_template_id[checklist.id] is not None
@@ -674,13 +692,10 @@ async def _persist_inspection(
                 detail="O veículo informado não está atribuído ao técnico autenticado.",
             )
 
-    assignment = await session.scalar(
-        select(ChecklistTechnicianAssignmentModel).where(
-            ChecklistTechnicianAssignmentModel.template_id == template_id,
-            ChecklistTechnicianAssignmentModel.technician_id == user.id,
-        )
-    )
-    period = _execution_period(assignment.frequency if assignment else "DAILY")
+    template = await session.get(ChecklistTemplateModel, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    period = _execution_period(template.frequency)
     completed_in_period = None
     if period is not None:
         completed_in_period = await session.scalar(

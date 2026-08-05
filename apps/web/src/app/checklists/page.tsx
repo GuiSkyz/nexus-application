@@ -42,7 +42,6 @@ export default function ChecklistsPage() {
   const [isAssignmentOpen, setIsAssignmentOpen] = useState(false);
   const [selectedChecklistId, setSelectedChecklistId] = useState("");
   const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
-  const [frequency, setFrequency] = useState<"DAILY" | "WEEKLY" | "ON_DEMAND">("DAILY");
   const [assignmentFilter, setAssignmentFilter] = useState("");
 
   const load = useCallback(async () => {
@@ -97,7 +96,6 @@ export default function ChecklistsPage() {
   const openAssignment = () => {
     setSelectedChecklistId((current) => current || publishedTemplates[0]?.id || "");
     setSelectedTechnicianIds([]);
-    setFrequency("DAILY");
     setAssignmentFilter("");
     setIsAssignmentOpen(true);
   };
@@ -108,7 +106,7 @@ export default function ChecklistsPage() {
       return;
     }
     try {
-      await ApiClient.assignChecklistToTechnicians(selectedChecklistId, selectedTechnicianIds, frequency);
+      await ApiClient.assignChecklistToTechnicians(selectedChecklistId, selectedTechnicianIds);
       await load();
       setIsAssignmentOpen(false);
       setFeedback({
@@ -125,9 +123,6 @@ export default function ChecklistsPage() {
     technician.operationalCategory === selectedChecklist?.category &&
     (!assignmentFilter || technician.teamName === assignmentFilter || technician.specialty === assignmentFilter),
   );
-  const coveredTechnicianIds = new Set(templates.flatMap((template) => template.assignedTechnicianIds));
-  const uncoveredTechnicians = technicians.filter((technician) => !coveredTechnicianIds.has(technician.id));
-
   return (
     <>
       <AppHeader pageTitle="Checklists" breadcrumb={["Operacional", "Checklists"]} />
@@ -152,13 +147,6 @@ export default function ChecklistsPage() {
         {feedback && (
           <div role="status" className={`rounded-lg px-4 py-3 text-sm font-semibold ${feedback.type === "success" ? "bg-success-soft text-success-foreground" : "bg-danger-soft text-danger-foreground"}`}>
             {feedback.text}
-          </div>
-        )}
-
-        {permissions.canCreate && technicians.length > 0 && (
-          <div className={`rounded-lg border px-4 py-3 text-sm ${uncoveredTechnicians.length ? "border-warning-soft bg-warning-soft text-warning-foreground" : "border-success-soft bg-success-soft text-success-foreground"}`}>
-            <span className="font-bold">Cobertura de checklists diretos: </span>
-            {uncoveredTechnicians.length ? `${uncoveredTechnicians.length} técnico(s) sem checklist atribuído (${uncoveredTechnicians.map((technician) => technician.fullName).join(", ")}).` : "todos os técnicos ativos possuem ao menos um checklist atribuído."}
           </div>
         )}
 
@@ -229,15 +217,6 @@ export default function ChecklistsPage() {
                   Checklist publicado
                   <select value={selectedChecklistId} onChange={(event) => { setSelectedChecklistId(event.target.value); setSelectedTechnicianIds([]); }} className="mt-1.5 h-10 w-full rounded-md border bg-white px-3 text-sm font-normal">
                     {publishedTemplates.map((template) => <option key={template.id} value={template.id}>{template.title} · {categoryLabel[template.category] || template.category} · v{template.version}</option>)}
-                  </select>
-                </label>
-
-                <label className="block text-xs font-bold text-text-primary">
-                  Periodicidade
-                  <select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 h-10 w-full rounded-md border bg-white px-3 text-sm font-normal">
-                    <option value="DAILY">Diário</option>
-                    <option value="WEEKLY">Semanal</option>
-                    <option value="ON_DEMAND">Sob demanda</option>
                   </select>
                 </label>
 

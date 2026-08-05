@@ -49,6 +49,9 @@ class ChecklistPayload(BaseModel):
     description: str | None = None
     createdBy: str = "Coordenação Operacional"
     distributionScope: str = "INDIVIDUAL"
+    frequency: str = Field(
+        default="DAILY", pattern="^(DAILY|WEEKLY|ON_DEMAND)$"
+    )
     sections: list[SectionPayload] = Field(default_factory=list)
 
 
@@ -67,6 +70,7 @@ class ChecklistResponse(BaseModel):
     title: str
     category: str
     distributionScope: str
+    frequency: str
     description: str | None
     status: str
     version: int
@@ -84,7 +88,6 @@ class ChecklistResponse(BaseModel):
 
 class BatchTechnicianAssignmentPayload(BaseModel):
     technicianIds: list[str] = Field(min_length=1)
-    frequency: str = "DAILY"
 
 
 def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
@@ -95,6 +98,7 @@ def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
         title=template.title,
         category=template.category,
         distributionScope=template.distribution_scope,
+        frequency=template.frequency,
         description=template.description,
         status=template.status,
         version=template.version,
@@ -206,6 +210,7 @@ async def create_checklist(
         title=payload.title.strip(),
         category=payload.category.strip(),
         distribution_scope=payload.distributionScope,
+        frequency=payload.frequency,
         description=payload.description,
         status="draft",
         version=1,
@@ -246,6 +251,7 @@ async def update_checklist(
     template.title = payload.title.strip()
     template.category = payload.category.strip()
     template.distribution_scope = payload.distributionScope
+    template.frequency = payload.frequency
     template.description = payload.description
     _apply_sections(template, payload.sections)
     await session.commit()
@@ -299,9 +305,6 @@ async def assign_technicians(
         )
     if template.distribution_scope != "INDIVIDUAL":
         raise HTTPException(status_code=422, detail="Este checklist não utiliza atribuição individual.")
-    if payload.frequency not in {"DAILY", "WEEKLY", "ON_DEMAND"}:
-        raise HTTPException(status_code=422, detail="Periodicidade de checklist inválida.")
-
     technician_result = await session.execute(
         select(UserModel).where(
             UserModel.id.in_(payload.technicianIds),
@@ -325,10 +328,10 @@ async def assign_technicians(
     }
     for assignment in template.technician_assignments:
         if assignment.technician_id in {technician.id for technician in technicians}:
-            assignment.frequency = payload.frequency
+            assignment.frequency = template.frequency
     template.technician_assignments.extend(
         ChecklistTechnicianAssignmentModel(
-            technician_id=technician.id, frequency=payload.frequency
+            technician_id=technician.id, frequency=template.frequency
         )
         for technician in technicians
         if technician.id not in assigned_ids
@@ -373,6 +376,7 @@ async def duplicate_checklist(
         title=f"Cópia de {source.title}",
         category=source.category,
         distribution_scope=source.distribution_scope,
+        frequency=source.frequency,
         description=source.description,
         status="draft",
         version=1,

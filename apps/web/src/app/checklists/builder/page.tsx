@@ -74,6 +74,7 @@ function BuilderContent() {
     title: "",
     category: "INSTALACAO_MANUTENCAO",
     distributionScope: "INDIVIDUAL",
+    frequency: "DAILY",
     description: "",
     status: "draft",
     version: 1,
@@ -244,7 +245,7 @@ function BuilderContent() {
       const saved = await ApiClient.saveChecklist({ ...template, createdBy: activeUser });
       await ApiClient.publishChecklist(saved.id);
       if (template.distributionScope === "INDIVIDUAL") {
-        await ApiClient.assignChecklistToTechnicians(saved.id, selectedRecipientIds, "DAILY");
+        await ApiClient.assignChecklistToTechnicians(saved.id, selectedRecipientIds);
       }
       if (template.distributionScope === "VEHICLE") {
         await ApiClient.batchAssignVehicles(saved.id, selectedRecipientIds);
@@ -423,6 +424,19 @@ function BuilderContent() {
                     <option value="CATEGORY">Por categoria — todos os técnicos da categoria</option>
                     <option value="VEHICLE">Por carro — técnico responsável pelo veículo</option>
                     <option value="INDIVIDUAL">Individual — técnico específico</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Periodicidade</label>
+                  <select
+                    value={template.frequency}
+                    onChange={(e) => setTemplate({ ...template, frequency: e.target.value as ChecklistTemplate["frequency"] })}
+                    className="w-full p-2.5 border rounded-md text-xs outline-none focus:border-blue-600"
+                    style={{ borderColor: "var(--border-default)" }}
+                  >
+                    <option value="DAILY">Diário</option>
+                    <option value="WEEKLY">Semanal</option>
+                    <option value="ON_DEMAND">Sob demanda</option>
                   </select>
                 </div>
               </div>

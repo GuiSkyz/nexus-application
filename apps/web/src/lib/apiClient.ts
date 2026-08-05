@@ -236,11 +236,10 @@ export class ApiClient {
   static assignChecklistToTechnicians(
     id: string,
     technicianIds: string[],
-    frequency: "DAILY" | "WEEKLY" | "ON_DEMAND",
   ) {
     return request<ChecklistTemplate>(`/checklists/${id}/assign-technicians`, {
       method: "POST",
-      body: JSON.stringify({ technicianIds, frequency }),
+      body: JSON.stringify({ technicianIds }),
     });
   }
 

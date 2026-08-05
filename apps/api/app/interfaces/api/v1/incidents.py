@@ -32,6 +32,7 @@ class ActionPlanResponse(BaseModel):
 class IncidentResponse(BaseModel):
     id: str
     inspectionId: str | None = None
+    technicianId: str | None = None
     inspectionTitle: str
     contextType: str
     vehiclePlate: str | None = None
@@ -53,8 +54,9 @@ class IncidentPayload(BaseModel):
     contextType: str = "ACTIVITY"
     vehiclePlate: str | None = None
     vehicleModel: str | None = None
-    technicianName: str = Field(min_length=3)
-    teamName: str = Field(min_length=2)
+    technicianId: str = Field(min_length=1)
+    technicianName: str | None = None
+    teamName: str | None = None
     questionText: str = Field(min_length=3)
     category: str = Field(min_length=2)
     severity: str = "MEDIA"
@@ -108,6 +110,7 @@ def _incident_response(incident: IncidentModel) -> IncidentResponse:
     return IncidentResponse(
         id=incident.code,
         inspectionId=incident.inspection_id,
+        technicianId=incident.technician_id,
         inspectionTitle=incident.inspection_title,
         contextType=incident.context_type,
         vehiclePlate=incident.vehicle_plate,
@@ -128,6 +131,13 @@ def _statement():
     return select(IncidentModel).options(selectinload(IncidentModel.action_plans))
 
 
+async def _registered_technician(session: AsyncSession, technician_id: str) -> UserModel:
+    technician = await session.get(UserModel, technician_id)
+    if not technician or technician.role != "TECNICO" or not technician.is_active:
+        raise HTTPException(status_code=422, detail="Selecione um técnico ativo cadastrado.")
+    return technician
+
+
 @router.get("", response_model=list[IncidentResponse])
 async def list_incidents(
     session: AsyncSession = Depends(get_db),
@@ -137,7 +147,10 @@ async def list_incidents(
 ) -> list[IncidentResponse]:
     statement = _statement().order_by(IncidentModel.created_at.desc())
     if user.role == "TECNICO":
-        statement = statement.where(IncidentModel.technician_name == user.full_name)
+        statement = statement.where(
+            (IncidentModel.technician_id == user.id)
+            | ((IncidentModel.technician_id.is_(None)) & (IncidentModel.technician_name == user.full_name))
+        )
     if status_filter and status_filter != "ALL":
         statement = statement.where(IncidentModel.status == status_filter)
     if severity and severity != "ALL":
@@ -152,6 +165,7 @@ async def create_incident(
 ) -> IncidentResponse:
     year = datetime.now(UTC).year
     total = await session.scalar(select(func.count()).select_from(IncidentModel)) or 0
+    technician = await _registered_technician(session, request.technicianId)
     incident = IncidentModel(
         code=f"NC-{year}-{total + 1:04d}",
         inspection_id=request.inspectionId,
@@ -159,8 +173,9 @@ async def create_incident(
         context_type=request.contextType,
         vehicle_plate=request.vehiclePlate,
         vehicle_model=request.vehicleModel,
-        technician_name=request.technicianName,
-        team_name=request.teamName,
+        technician_id=technician.id,
+        technician_name=technician.full_name,
+        team_name=technician.team_name or "Sem equipe",
         question_text=request.questionText,
         category=request.category,
         severity=request.severity,
@@ -185,13 +200,15 @@ async def update_incident(
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Não conformidade não encontrada.")
+    technician = await _registered_technician(session, request.technicianId)
     incident.inspection_id = request.inspectionId
     incident.inspection_title = request.inspectionTitle
     incident.context_type = request.contextType
     incident.vehicle_plate = request.vehiclePlate
     incident.vehicle_model = request.vehicleModel
-    incident.technician_name = request.technicianName
-    incident.team_name = request.teamName
+    incident.technician_id = technician.id
+    incident.technician_name = technician.full_name
+    incident.team_name = technician.team_name or "Sem equipe"
     incident.question_text = request.questionText
     incident.category = request.category
     incident.severity = request.severity

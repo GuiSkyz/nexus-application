@@ -7,12 +7,12 @@ import { AppHeader } from "@/components/nexus/app-header";
 import { useRole } from "@/components/nexus/role-selector";
 import { ApiClient } from "@/lib/apiClient";
 import { Incident } from "@/types/incident";
+import { Technician } from "@/types/technician";
 
 const emptyIncident: Partial<Incident> = {
   inspectionTitle: "Registro manual",
   contextType: "ACTIVITY",
-  technicianName: "",
-  teamName: "",
+  technicianId: "",
   questionText: "",
   category: "OPERACIONAL",
   severity: "MEDIA",
@@ -24,6 +24,7 @@ export default function IncidentsPage() {
   const { activeRole } = useRole();
   const isTechnician = activeRole === "TECNICO";
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [severityFilter, setSeverityFilter] = useState("ALL");
@@ -34,7 +35,12 @@ export default function IncidentsPage() {
 
   const load = useCallback(async () => {
     try {
-      setIncidents(await ApiClient.fetchIncidents());
+      const [records, registeredTechnicians] = await Promise.all([
+        ApiClient.fetchIncidents(),
+        ApiClient.fetchTechnicians(),
+      ]);
+      setIncidents(records);
+      setTechnicians(registeredTechnicians.filter((technician) => technician.isActive));
       setFeedback("");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Falha ao carregar não conformidades.");
@@ -79,6 +85,10 @@ export default function IncidentsPage() {
       setFeedback(error instanceof Error ? error.message : "Não foi possível salvar o plano.");
     }
   };
+
+  const selectedTechnician = technicians.find(
+    (technician) => technician.id === editing?.technicianId,
+  );
 
   return (
     <>
@@ -154,8 +164,8 @@ export default function IncidentsPage() {
           <form onSubmit={saveIncident} className="w-full max-w-2xl space-y-4 rounded-xl bg-white p-6 shadow-overlay">
             <h2 className="text-base font-bold text-text-primary">{editing.id ? "Editar não conformidade" : "Registrar não conformidade"}</h2>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Técnico"><input required value={editing.technicianName || ""} onChange={(e) => setEditing({ ...editing, technicianName: e.target.value })} /></Field>
-              <Field label="Equipe"><input required value={editing.teamName || ""} onChange={(e) => setEditing({ ...editing, teamName: e.target.value })} /></Field>
+              <Field label="Técnico cadastrado"><select required value={editing.technicianId || ""} onChange={(e) => setEditing({ ...editing, technicianId: e.target.value })}><option value="">Selecione o técnico responsável</option>{technicians.map((technician) => <option key={technician.id} value={technician.id}>{technician.fullName} · {technician.employeeCode || "Sem matrícula"}</option>)}</select></Field>
+              <Field label="Equipe"><input readOnly value={selectedTechnician?.teamName || editing.teamName || "Definida pelo cadastro"} className="bg-surface-muted text-text-secondary" /></Field>
               <Field label="Categoria"><input required value={editing.category || ""} onChange={(e) => setEditing({ ...editing, category: e.target.value })} /></Field>
               <Field label="Severidade"><select value={editing.severity} onChange={(e) => setEditing({ ...editing, severity: e.target.value as Incident["severity"] })}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></Field>
             </div>

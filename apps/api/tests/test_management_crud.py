@@ -107,13 +107,14 @@ async def test_settings_and_incident_crud(client: AsyncClient) -> None:
     assert updated_settings.status_code == 200
     assert updated_settings.json()["organizationName"] == "Operação Teste"
 
+    technicians = (await client.get("/api/v1/technicians")).json()
+    technician_id = next(item["id"] for item in technicians if item["fullName"] == "João Silva")
     created = await client.post(
         "/api/v1/incidents",
         json={
             "inspectionTitle": "Registro manual",
             "contextType": "ACTIVITY",
-            "technicianName": "Ana Técnica",
-            "teamName": "Equipe Delta",
+            "technicianId": technician_id,
             "questionText": "Sinalização ausente",
             "category": "SEGURANÇA",
             "severity": "ALTA",

@@ -15,6 +15,9 @@ class IncidentModel(Base):
     context_type: Mapped[str] = mapped_column(String(50), nullable=False, default="VEHICLE")
     vehicle_plate: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     vehicle_model: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    technician_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     technician_name: Mapped[str] = mapped_column(String(255), nullable=False)
     team_name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)

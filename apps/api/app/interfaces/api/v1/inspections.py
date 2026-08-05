@@ -255,6 +255,30 @@ async def _question_texts_for_inspection(
     }
 
 
+async def _registered_inspection_technician(
+    session: AsyncSession, inspection: InspectionModel
+) -> UserModel:
+    if inspection.technician_id:
+        technician = await session.get(UserModel, inspection.technician_id)
+        if technician and technician.role == "TECNICO" and technician.is_active:
+            return technician
+    technicians = (
+        await session.execute(
+            select(UserModel).where(
+                UserModel.role == "TECNICO",
+                UserModel.is_active.is_(True),
+                UserModel.full_name == inspection.technician_name,
+            )
+        )
+    ).scalars().all()
+    if len(technicians) != 1:
+        raise HTTPException(
+            status_code=422,
+            detail="A inspeção precisa estar vinculada a um técnico cadastrado para abrir a NC.",
+        )
+    return technicians[0]
+
+
 @router.get("/audit", response_model=list[AuditInspectionSummary])
 async def list_audit_inspections(
     user: UserModel = Depends(get_current_user),
@@ -371,6 +395,7 @@ async def create_audit_nonconformity(
         )
         or payload.questionId
     )
+    technician = await _registered_inspection_technician(session, inspection)
     incident = IncidentModel(
         code=f"NC-{datetime.now(UTC).year}-{uuid4().hex[:8].upper()}",
         inspection_id=inspection.id,
@@ -378,8 +403,9 @@ async def create_audit_nonconformity(
         context_type="AUDIT",
         vehicle_plate=inspection.vehicle_plate,
         vehicle_model=inspection.vehicle_model,
-        technician_name=inspection.technician_name,
-        team_name="Auditoria",
+        technician_id=technician.id,
+        technician_name=technician.full_name,
+        team_name=technician.team_name or "Sem equipe",
         question_text=question_text,
         category="Auditoria de checklist",
         severity=payload.severity,
@@ -770,6 +796,7 @@ async def _persist_inspection(
                 context_type="VEHICLE" if vehicle_id else "INDIVIDUAL",
                 vehicle_plate=inspection.vehicle_plate,
                 vehicle_model=inspection.vehicle_model,
+                technician_id=user.id,
                 technician_name=user.full_name,
                 team_name=user.team_name or "Sem equipe",
                 category=category,

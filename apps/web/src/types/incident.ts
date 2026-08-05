@@ -23,6 +23,7 @@ export interface ActionPlan {
 export interface Incident {
   id: string; // Ex: "NC-2026-089"
   inspectionId?: string;
+  technicianId?: string;
   inspectionTitle: string;
   contextType: "VEHICLE" | "INDIVIDUAL" | "ACTIVITY" | "APR";
   vehiclePlate?: string;

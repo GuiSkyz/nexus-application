@@ -54,6 +54,13 @@ class IncidentResponse(BaseModel):
     actionPlan: ActionPlanResponse | None = None
 
 
+class ActionPlanPayload(BaseModel):
+    description: str = Field(min_length=3)
+    assignedTo: str = Field(min_length=2)
+    dueDate: str = Field(min_length=1)
+    createdBy: str = "Gestão Operacional"
+
+
 class IncidentPayload(BaseModel):
     inspectionId: str | None = None
     questionId: str | None = None
@@ -69,14 +76,7 @@ class IncidentPayload(BaseModel):
     severity: str = "MEDIA"
     status: str = "ABERTA"
     description: str | None = None
-    actionPlan: "ActionPlanPayload" | None = None
-
-
-class ActionPlanPayload(BaseModel):
-    description: str = Field(min_length=3)
-    assignedTo: str = Field(min_length=2)
-    dueDate: str = Field(min_length=1)
-    createdBy: str = "Gestão Operacional"
+    actionPlan: ActionPlanPayload | None = None
 
 
 class CreateActionPlanRequest(BaseModel):

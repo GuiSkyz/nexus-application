@@ -37,6 +37,27 @@ export class ApiError extends Error {
   }
 }
 
+function getErrorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== "object") return fallback;
+
+  const detail = (body as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && typeof (item as { msg?: unknown }).msg === "string") {
+          return (item as { msg: string }).msg;
+        }
+        return null;
+      })
+      .filter((message): message is string => Boolean(message));
+    if (messages.length) return messages.join(" ");
+  }
+
+  return fallback;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -57,7 +78,7 @@ async function request<T>(
     let message = `Falha de comunicação (${response.status}).`;
     try {
       const body = await response.json();
-      message = body.detail || message;
+      message = getErrorMessage(body, message);
     } catch {
       // Mantém a mensagem HTTP quando a resposta não é JSON.
     }

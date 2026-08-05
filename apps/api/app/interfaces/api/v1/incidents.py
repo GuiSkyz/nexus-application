@@ -56,6 +56,7 @@ class IncidentResponse(BaseModel):
 
 class IncidentPayload(BaseModel):
     inspectionId: str | None = None
+    questionId: str | None = None
     inspectionTitle: str = Field(min_length=3)
     contextType: str = "ACTIVITY"
     vehiclePlate: str | None = None
@@ -68,6 +69,14 @@ class IncidentPayload(BaseModel):
     severity: str = "MEDIA"
     status: str = "ABERTA"
     description: str | None = None
+    actionPlan: "ActionPlanPayload" | None = None
+
+
+class ActionPlanPayload(BaseModel):
+    description: str = Field(min_length=3)
+    assignedTo: str = Field(min_length=2)
+    dueDate: str = Field(min_length=1)
+    createdBy: str = "Gestão Operacional"
 
 
 class CreateActionPlanRequest(BaseModel):
@@ -187,12 +196,35 @@ async def list_incidents(
 async def create_incident(
     request: IncidentPayload, session: AsyncSession = Depends(get_db)
 ) -> IncidentResponse:
+    if not request.actionPlan:
+        raise HTTPException(
+            status_code=422,
+            detail="Informe o plano de ação ao abrir a não conformidade.",
+        )
     year = datetime.now(UTC).year
-    total = await session.scalar(select(func.count()).select_from(IncidentModel)) or 0
     technician = await _registered_technician(session, request.technicianId)
+    duplicate_filters = [
+        IncidentModel.technician_id == technician.id,
+        IncidentModel.question_text == request.questionText,
+        IncidentModel.status != "CANCELADA",
+    ]
+    if request.inspectionId:
+        duplicate_filters.append(IncidentModel.inspection_id == request.inspectionId)
+    else:
+        duplicate_filters.append(IncidentModel.inspection_id.is_(None))
+    if request.questionId:
+        duplicate_filters.append(IncidentModel.question_id == request.questionId)
+    existing = await session.scalar(select(IncidentModel).where(*duplicate_filters))
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe uma não conformidade aberta para esta pergunta ({existing.code}).",
+        )
+    total = await session.scalar(select(func.count()).select_from(IncidentModel)) or 0
     incident = IncidentModel(
         code=f"NC-{year}-{total + 1:04d}",
         inspection_id=request.inspectionId,
+        question_id=request.questionId,
         inspection_title=request.inspectionTitle,
         context_type=request.contextType,
         vehicle_plate=request.vehiclePlate,
@@ -203,8 +235,17 @@ async def create_incident(
         question_text=request.questionText,
         category=request.category,
         severity=request.severity,
-        status=request.status,
+        status="PLANO_DE_ACAO",
         description=request.description,
+    )
+    incident.action_plans.append(
+        ActionPlanModel(
+            id=str(uuid.uuid4()),
+            description=request.actionPlan.description,
+            assigned_to=request.actionPlan.assignedTo,
+            due_date=request.actionPlan.dueDate,
+            created_by=request.actionPlan.createdBy,
+        )
     )
     session.add(incident)
     await session.commit()

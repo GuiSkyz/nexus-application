@@ -209,8 +209,21 @@ export class ApiClient {
     return request<AuditInspectionDetail>(`/inspections/audit/${id}`);
   }
 
-  static createAuditNonconformity(id: string, questionId: string, description: string, severity: string) {
-    return request<{ code: string }>(`/inspections/audit/${id}/nonconformity`, { method: "POST", body: JSON.stringify({ questionId, description, severity }) });
+  static createAuditNonconformity(
+    id: string,
+    payload: {
+      questionId: string;
+      description: string;
+      severity: string;
+      actionPlanDescription: string;
+      actionPlanAssignedTo: string;
+      actionPlanDueDate: string;
+    },
+  ) {
+    return request<{ code: string }>(`/inspections/audit/${id}/nonconformity`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 
   static exportAuditPdf(id: string) {
@@ -259,7 +272,7 @@ export class ApiClient {
     return request<Incident[]>("/incidents");
   }
 
-  static saveIncident(incident: Partial<Incident>) {
+  static saveIncident(incident: object & { id?: string }) {
     const path = incident.id ? `/incidents/${incident.id}` : "/incidents";
     return request<Incident>(path, {
       method: incident.id ? "PUT" : "POST",

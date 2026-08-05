@@ -31,7 +31,7 @@ from app.infrastructure.database.models.checklist_model import (
     ChecklistTechnicianAssignmentModel,
     ChecklistTemplateModel,
 )
-from app.infrastructure.database.models.incident_model import IncidentModel
+from app.infrastructure.database.models.incident_model import ActionPlanModel, IncidentModel
 from app.infrastructure.database.models.inspection_model import (
     EvidenceModel,
     InspectionAnswerModel,
@@ -174,6 +174,9 @@ class AuditNonconformityRequest(BaseModel):
     questionId: str = Field(min_length=1)
     description: str = Field(min_length=3)
     severity: str = "MEDIA"
+    actionPlanDescription: str = Field(min_length=3)
+    actionPlanAssignedTo: str = Field(min_length=2)
+    actionPlanDueDate: str = Field(min_length=1)
 
 
 class AuditPdfResponse(BaseModel):
@@ -396,9 +399,22 @@ async def create_audit_nonconformity(
         or payload.questionId
     )
     technician = await _registered_inspection_technician(session, inspection)
+    existing = await session.scalar(
+        select(IncidentModel).where(
+            IncidentModel.inspection_id == inspection.id,
+            IncidentModel.question_id == payload.questionId,
+            IncidentModel.status != "CANCELADA",
+        )
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe uma não conformidade aberta para esta pergunta ({existing.code}).",
+        )
     incident = IncidentModel(
         code=f"NC-{datetime.now(UTC).year}-{uuid4().hex[:8].upper()}",
         inspection_id=inspection.id,
+        question_id=payload.questionId,
         inspection_title=inspection.title,
         context_type="AUDIT",
         vehicle_plate=inspection.vehicle_plate,
@@ -409,8 +425,17 @@ async def create_audit_nonconformity(
         question_text=question_text,
         category="Auditoria de checklist",
         severity=payload.severity,
-        status="ABERTA",
+        status="PLANO_DE_ACAO",
         description=payload.description,
+    )
+    incident.action_plans.append(
+        ActionPlanModel(
+            id=str(uuid4()),
+            description=payload.actionPlanDescription,
+            assigned_to=payload.actionPlanAssignedTo,
+            due_date=payload.actionPlanDueDate,
+            created_by=user.full_name,
+        )
     )
     session.add(incident)
     await session.commit()
@@ -792,6 +817,7 @@ async def _persist_inspection(
                     f"{uuid4().hex[:8].upper()}"
                 ),
                 inspection_id=inspection.id,
+                question_id=str(question_id),
                 inspection_title=inspection.title,
                 context_type="VEHICLE" if vehicle_id else "INDIVIDUAL",
                 vehicle_plate=inspection.vehicle_plate,

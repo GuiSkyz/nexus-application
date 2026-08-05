@@ -11,6 +11,7 @@ class IncidentModel(Base):
         String(20), unique=True, index=True, nullable=False, comment="Código amigável da NC (ex: NC-2026-089)"
     )
     inspection_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    question_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     inspection_title: Mapped[str] = mapped_column(String(255), nullable=False)
     context_type: Mapped[str] = mapped_column(String(50), nullable=False, default="VEHICLE")
     vehicle_plate: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)

@@ -22,11 +22,6 @@ import {
   Send,
   Eye,
   CheckSquare,
-  Camera,
-  FileText,
-  Clock,
-  Calendar,
-  Hash,
   PenTool,
   HelpCircle,
   AlertTriangle,
@@ -36,6 +31,35 @@ const categoryLabel: Record<string, string> = {
   INSTALACAO_MANUTENCAO: "Instalação & Manutenção",
   INFRAESTRUTURA: "Infraestrutura",
 };
+
+const questionTypes: { type: QuestionType; label: string }[] = [
+  { type: "yes_no", label: "Sim / Não" },
+  { type: "yes_no_na", label: "Sim / Não / N/A" },
+  { type: "multiple_choice", label: "Múltipla Escolha" },
+  { type: "single_choice", label: "Escolha Única" },
+  { type: "signature", label: "Assinatura Digital" },
+];
+
+const allowedQuestionTypes = new Set<QuestionType>(questionTypes.map((item) => item.type));
+
+const normalizeQuestionType = (type: string): QuestionType =>
+  allowedQuestionTypes.has(type as QuestionType) ? (type as QuestionType) : "yes_no";
+
+const normalizeTemplateQuestionTypes = (template: ChecklistTemplate): ChecklistTemplate => ({
+  ...template,
+  sections: template.sections.map((section) => ({
+    ...section,
+    questions: section.questions.map((question) => {
+      const type = normalizeQuestionType(question.type);
+      const needsOptions = type === "single_choice" || type === "multiple_choice";
+      return {
+        ...question,
+        type,
+        options: needsOptions ? question.options : undefined,
+      };
+    }),
+  })),
+});
 
 function BuilderContent() {
   const router = useRouter();
@@ -94,7 +118,7 @@ function BuilderContent() {
     });
     if (!editId) return;
     ApiClient.fetchChecklist(editId)
-      .then((existing) => setTemplate(existing))
+      .then((existing) => setTemplate(normalizeTemplateQuestionTypes(existing)))
       .catch((error) =>
         showNotification(
           "error",
@@ -174,7 +198,7 @@ function BuilderContent() {
       type,
       options: needsOptions ? (question.options?.length ? question.options : defaults) : undefined,
       // Uma pergunta cuja própria resposta é foto não precisa de uma segunda foto obrigatória.
-      requirePhoto: type === "photo" ? false : question.requirePhoto,
+      requirePhoto: question.requirePhoto,
     });
   };
 
@@ -231,20 +255,6 @@ function BuilderContent() {
       showNotification("error", e instanceof Error ? e.message : "Erro ao publicar.");
     }
   };
-
-  const questionTypes: { type: QuestionType; label: string }[] = [
-    { type: "yes_no", label: "Sim / Não" },
-    { type: "yes_no_na", label: "Sim / Não / N/A" },
-    { type: "text", label: "Texto Curto" },
-    { type: "textarea", label: "Texto Longo" },
-    { type: "number", label: "Número / Medição" },
-    { type: "single_choice", label: "Escolha Única (Select)" },
-    { type: "multiple_choice", label: "Múltipla Escolha" },
-    { type: "photo", label: "Evidência Fotográfica" },
-    { type: "signature", label: "Assinatura Digital" },
-    { type: "date", label: "Data" },
-    { type: "time", label: "Hora" },
-  ];
 
   return (
     <>
@@ -357,20 +367,11 @@ function BuilderContent() {
                         <button className="px-3 py-1.5 bg-white border rounded font-semibold text-slate-700">N/A</button>
                       </div>
                     )}
-                    {q.type === "text" && <input disabled placeholder="Resposta em texto curto..." className="w-full p-2 bg-white border rounded text-xs" />}
-                    {q.type === "textarea" && <textarea disabled placeholder="Resposta em texto longo..." className="w-full p-2 bg-white border rounded text-xs" rows={2} />}
-                    {q.type === "number" && <input disabled type="number" placeholder="Digite um valor numérico..." className="w-48 p-2 bg-white border rounded text-xs" />}
-                    {q.type === "photo" && (
-                      <div className="p-3 bg-white border border-dashed rounded text-center text-blue-600 font-semibold cursor-pointer">
-                        📷 Simular Anexo de Foto
-                      </div>
-                    )}
                     {q.type === "signature" && (
                       <div className="p-3 bg-white border border-dashed rounded text-center text-slate-400 font-mono">
                         [ Campo de Assinatura Touch / Digital ]
                       </div>
                     )}
-                    {["date", "time"].includes(q.type) && <input disabled type={q.type} className="w-48 p-2 bg-white border rounded text-xs" />}
                     {["single_choice", "multiple_choice"].includes(q.type) && (
                       <div className="space-y-2">
                         {(q.options || []).map((option) => <label key={option.id} className="flex items-center gap-2"><input disabled type={q.type === "multiple_choice" ? "checkbox" : "radio"} />{option.label}</label>)}
@@ -517,7 +518,7 @@ function BuilderContent() {
                         </div>
 
                         {/* Toggle Exigir Foto */}
-                        {q.type !== "photo" && <div className="flex items-center gap-2 pt-4">
+                        <div className="flex items-center gap-2 pt-4">
                           <input
                             type="checkbox"
                             id={`photo-${q.id}`}
@@ -528,7 +529,7 @@ function BuilderContent() {
                           <label htmlFor={`photo-${q.id}`} className="text-xs font-medium text-slate-700 cursor-pointer">
                             Exigir Foto Comprovatória
                           </label>
-                        </div>}
+                        </div>
 
                         {/* Toggle Exigir Justificativa */}
                         <div className="flex items-center gap-2 pt-4">

@@ -51,7 +51,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
   );
   const requiredPhotosComplete = inspection.questions.every(
     (question) =>
-      !(question.requirePhoto || question.type === "photo") ||
+      !question.requirePhoto ||
       evidences.some((evidence) => evidence.questionId === question.id),
   );
   const requiredJustificationsComplete = inspection.questions.every(
@@ -64,7 +64,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
   const requiredPendingCount = inspection.questions.filter((question) => {
     const missingAnswer = question.isRequired && !hasAnswer(answers[question.id]);
     const missingPhoto =
-      (question.requirePhoto || question.type === "photo") &&
+      question.requirePhoto &&
       !evidences.some((evidence) => evidence.questionId === question.id);
     const missingJustification =
       Boolean(question.requireJustification) &&
@@ -130,7 +130,49 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       description: `Evidência de campo · ${question.category}`,
     };
     setEvidences((current) => [...current, newEvidence]);
-    if (question.type === "photo") handleSelectAnswer(question.id, "PHOTO_ATTACHED");
+  };
+
+  const removeEvidence = (evidenceId: string) => {
+    setEvidences((current) => current.filter((evidence) => evidence.id !== evidenceId));
+  };
+
+  const renderEvidenceCapture = (question: ChecklistQuestion, required = false) => {
+    const questionEvidences = evidences.filter((evidence) => evidence.questionId === question.id);
+    const hasPhotos = questionEvidences.length > 0;
+    const title = required ? "Foto comprobatória obrigatória" : "Adicionar foto de evidência";
+
+    return (
+      <View style={styles.evidenceCapture}>
+        <TouchableOpacity
+          style={[styles.dashedPhotoBox, hasPhotos && styles.photoAttachedBox]}
+          onPress={() => void handleAddPhoto(question)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={hasPhotos ? `Adicionar outra foto para ${question.questionText}` : `Tirar foto para ${question.questionText}`}
+        >
+          <View style={styles.photoIconContainer}><Text style={{ fontSize: 20 }}>📷</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dashedPhotoTitle}>{hasPhotos ? `${questionEvidences.length} ${questionEvidences.length === 1 ? "foto adicionada" : "fotos adicionadas"}` : title}</Text>
+            <Text style={styles.dashedPhotoSub}>Data, hora e GPS serão registrados</Text>
+          </View>
+          <View style={styles.takePhotoBtn}><Text style={styles.takePhotoBtnText}>{hasPhotos ? "Adicionar" : "Tirar foto"}</Text></View>
+        </TouchableOpacity>
+
+        {hasPhotos && (
+          <View style={styles.evidenceGallery} accessibilityLabel={`${questionEvidences.length} fotos anexadas a esta questão`}>
+            {questionEvidences.map((evidence, index) => (
+              <View key={evidence.id} style={styles.evidenceThumbnailWrap}>
+                <Image source={{ uri: evidence.photoUri }} style={styles.evidenceThumbnail} />
+                <View style={styles.evidenceIndex}><Text style={styles.evidenceIndexText}>{index + 1}</Text></View>
+                <TouchableOpacity onPress={() => removeEvidence(evidence.id)} style={styles.removeEvidenceButton} accessibilityRole="button" accessibilityLabel={`Remover foto ${index + 1}`}>
+                  <Text style={styles.removeEvidenceButtonText}>×</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
   };
 
   const renderAnswerControl = (question: ChecklistQuestion) => {
@@ -154,18 +196,6 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
         {question.type !== "yes_no" && renderChoice("Não se aplica", "NA", styles.actionBtnNaActive, styles.actionBtnTextNaActive)}
       </View>;
     }
-    if (question.type === "photo") {
-      const attached = evidences.some((evidence) => evidence.questionId === question.id);
-      return <TouchableOpacity style={[styles.dashedPhotoBox, attached && styles.photoAttachedBox]} onPress={() => void handleAddPhoto(question)} activeOpacity={0.7}>
-        <View style={styles.photoIconContainer}><Text style={{ fontSize: 20 }}>📷</Text></View>
-        <View style={{ flex: 1 }}><Text style={styles.dashedPhotoTitle}>{attached ? "Foto adicionada" : "Adicionar foto de evidência"}</Text><Text style={styles.dashedPhotoSub}>Data, hora e GPS serão registrados</Text></View>
-        <View style={styles.takePhotoBtn}><Text style={styles.takePhotoBtnText}>{attached ? "Trocar" : "Tirar foto"}</Text></View>
-      </TouchableOpacity>;
-    }
-    if (question.type === "text" || question.type === "number" || question.type === "date" || question.type === "time") {
-      return <TextInput style={styles.answerInput} value={typeof answer === "string" ? answer : ""} onChangeText={(value) => handleSelectAnswer(question.id, value)} keyboardType={question.type === "number" ? "decimal-pad" : "default"} placeholder={question.type === "number" ? "Informe o valor" : question.type === "date" ? "DD/MM/AAAA" : question.type === "time" ? "HH:MM" : "Digite a resposta"} placeholderTextColor={colors.text.muted} />;
-    }
-    if (question.type === "textarea") return <TextInput style={[styles.answerInput, styles.textAreaInput]} multiline value={typeof answer === "string" ? answer : ""} onChangeText={(value) => handleSelectAnswer(question.id, value)} placeholder="Descreva a resposta" placeholderTextColor={colors.text.muted} />;
     if (question.type === "signature") return <SignaturePad signerName={inspection.technicianName} onChange={(signature) => handleSelectAnswer(question.id, signature ? "SIGNED" : "")} />;
 
     return <View style={styles.optionList}>{(question.options || []).map((option) => {
@@ -383,13 +413,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                         </View>
                       )}
 
-                      {q.type !== "photo" && q.requirePhoto && (
-                        <TouchableOpacity style={styles.dashedPhotoBox} onPress={() => void handleAddPhoto(q)} activeOpacity={0.7}>
-                          <View style={styles.photoIconContainer}><Text style={{ fontSize: 20 }}>📷</Text></View>
-                          <View style={{ flex: 1 }}><Text style={styles.dashedPhotoTitle}>Foto comprobatória obrigatória</Text><Text style={styles.dashedPhotoSub}>Data, hora e GPS serão registrados</Text></View>
-                          <View style={styles.takePhotoBtn}><Text style={styles.takePhotoBtnText}>Tirar foto</Text></View>
-                        </TouchableOpacity>
-                      )}
+                      {q.requirePhoto && renderEvidenceCapture(q, true)}
                     </View>
                   );
                 })}
@@ -398,23 +422,6 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
               </View>
             );
           })}
-
-          {/* Lista de Evidências Fotográficas Anexadas */}
-          {evidences.length > 0 && (
-            <View style={styles.evidenceSection}>
-              <Text style={styles.categorySectionHeader}>EVIDÊNCIAS ANEXADAS ({evidences.length})</Text>
-              {evidences.map((ev) => (
-                <View key={ev.id} style={styles.evidenceCard}>
-                  <Image source={{ uri: ev.photoUri }} style={styles.evidenceImage} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.evidenceTitle}>{ev.description}</Text>
-                    <Text style={styles.evidenceMeta}>📅 {ev.capturedAt}</Text>
-                    <Text style={styles.evidenceGps}>📍 GPS: -23.5505, -46.6333 (Verificado)</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
 
           {/* Observações / Desvios Encontrados */}
           <View style={styles.notesSection}>
@@ -837,6 +844,60 @@ const styles = StyleSheet.create({
   photoAttachedBox: {
     backgroundColor: colors.success.soft,
     borderColor: colors.success.DEFAULT,
+  },
+  evidenceCapture: {
+    marginTop: spacing[3],
+  },
+  evidenceGallery: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing[2],
+    marginTop: spacing[3],
+  },
+  evidenceThumbnailWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    overflow: "hidden",
+    backgroundColor: colors.surface.muted,
+  },
+  evidenceThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  evidenceIndex: {
+    position: "absolute",
+    left: 4,
+    bottom: 4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(4, 22, 47, 0.82)",
+  },
+  evidenceIndexText: {
+    color: colors.text.inverse,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  removeEvidenceButton: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(4, 22, 47, 0.82)",
+  },
+  removeEvidenceButtonText: {
+    color: colors.text.inverse,
+    fontSize: 22,
+    fontWeight: "400",
+    lineHeight: 24,
   },
   answerInput: {
     minHeight: 52,

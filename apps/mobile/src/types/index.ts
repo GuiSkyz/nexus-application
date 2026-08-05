@@ -69,15 +69,9 @@ export type ChecklistAnswerValue = string | string[];
 export type ChecklistQuestionType =
   | "yes_no"
   | "yes_no_na"
-  | "text"
-  | "textarea"
-  | "number"
   | "single_choice"
   | "multiple_choice"
-  | "photo"
-  | "signature"
-  | "date"
-  | "time";
+  | "signature";
 
 export interface ChecklistQuestion {
   id: string;

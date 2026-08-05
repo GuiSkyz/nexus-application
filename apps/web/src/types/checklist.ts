@@ -12,15 +12,9 @@ export type ChecklistDistributionScope = "CATEGORY" | "VEHICLE" | "INDIVIDUAL";
 export type QuestionType =
   | "yes_no"
   | "yes_no_na"
-  | "text"
-  | "textarea"
-  | "number"
   | "single_choice"
   | "multiple_choice"
-  | "photo"
-  | "signature"
-  | "date"
-  | "time";
+  | "signature";
 
 export interface ChecklistQuestionOption {
   id: string;

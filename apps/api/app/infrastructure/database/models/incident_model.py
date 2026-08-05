@@ -38,6 +38,9 @@ class ActionPlanModel(Base):
     incident_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
     )
+    assigned_technician_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     assigned_to: Mapped[str] = mapped_column(String(255), nullable=False)
     due_date: Mapped[str] = mapped_column(String(50), nullable=False)

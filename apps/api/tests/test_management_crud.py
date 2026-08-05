@@ -122,7 +122,6 @@ async def test_settings_and_incident_crud(client: AsyncClient) -> None:
             "description": "Área sem isolamento.",
             "actionPlan": {
                 "description": "Isolar a área e registrar evidência.",
-                "assignedTo": "João Silva",
                 "dueDate": "2026-08-10T18:00:00",
                 "createdBy": "Gestão Operacional",
             },

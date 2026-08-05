@@ -16,7 +16,7 @@ export default function AuditDetailPage() {
   const [questionId, setQuestionId] = useState("");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("MEDIA");
-  const [plan, setPlan] = useState({ description: "", assignedTo: "", dueDate: "" });
+  const [plan, setPlan] = useState({ description: "", dueDate: "" });
   const [dialogMessage, setDialogMessage] = useState("");
   const [dialogTitle, setDialogTitle] = useState("");
 
@@ -32,12 +32,11 @@ export default function AuditDetailPage() {
         description,
         severity,
         actionPlanDescription: plan.description,
-        actionPlanAssignedTo: plan.assignedTo,
         actionPlanDueDate: plan.dueDate,
       });
       setQuestionId("");
       setDescription("");
-      setPlan({ description: "", assignedTo: "", dueDate: "" });
+      setPlan({ description: "", dueDate: "" });
       openDialog("Não conformidade aberta", `A NC ${result.code} foi criada com o plano de ação e enviada ao técnico.`);
     } catch (error) {
       openDialog("Não foi possível abrir a NC", error instanceof Error ? error.message : "Tente novamente.");
@@ -120,9 +119,9 @@ export default function AuditDetailPage() {
               </select>
               <p className="mt-4 text-xs font-bold text-warning-foreground">Plano de ação</p>
               <textarea value={plan.description} onChange={(e) => setPlan({ ...plan, description: e.target.value })} placeholder="Ação corretiva solicitada" className="mt-2 min-h-20 w-full rounded border p-2" />
-              <input value={plan.assignedTo} onChange={(e) => setPlan({ ...plan, assignedTo: e.target.value })} placeholder="Responsável pela ação" className="mt-2 h-10 w-full rounded border px-2" />
+              <p className="mt-2 rounded border border-warning-soft bg-white/70 px-2 py-2 text-xs text-text-secondary">Responsável: {audit.technicianName} (técnico vinculado ao checklist)</p>
               <input type="datetime-local" value={plan.dueDate} onChange={(e) => setPlan({ ...plan, dueDate: e.target.value })} className="mt-2 h-10 w-full rounded border px-2" />
-              <button disabled={!questionId || !description.trim() || !plan.description.trim() || !plan.assignedTo.trim() || !plan.dueDate} onClick={() => void createNonconformity()} className="mt-3 h-10 w-full rounded bg-warning-foreground text-xs font-bold text-white disabled:opacity-50">
+              <button disabled={!questionId || !description.trim() || !plan.description.trim() || !plan.dueDate} onClick={() => void createNonconformity()} className="mt-3 h-10 w-full rounded bg-warning-foreground text-xs font-bold text-white disabled:opacity-50">
                 Abrir NC
               </button>
             </section>

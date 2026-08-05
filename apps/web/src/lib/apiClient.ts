@@ -216,7 +216,6 @@ export class ApiClient {
       description: string;
       severity: string;
       actionPlanDescription: string;
-      actionPlanAssignedTo: string;
       actionPlanDueDate: string;
     },
   ) {

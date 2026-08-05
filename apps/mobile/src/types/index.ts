@@ -162,6 +162,7 @@ export interface ActionPlan {
   incidentId: string;
   description: string;
   assignedTo: string;
+  assignedTechnicianId?: string;
   dueDate: string;
   resolvedAt?: string;
   resolutionNotes?: string;

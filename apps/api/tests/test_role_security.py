@@ -114,7 +114,6 @@ async def test_technician_can_view_own_action_plan_only():
             "/api/v1/incidents/NC-2026-085/action-plan",
             json={
                 "description": "Substituir a escada antes da próxima atividade.",
-                "assignedTo": "João Silva",
                 "dueDate": "2026-08-01T18:00:00Z",
                 "createdBy": "Coordenação Operacional",
             },

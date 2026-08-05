@@ -101,6 +101,7 @@ async def isolated_incident_database() -> AsyncGenerator[None, None]:
                 IncidentModel(
                     code="NC-2026-085",
                     inspection_id=inspections[0].id,
+                    technician_id=technicians[0].id,
                     inspection_title="Inspeção de escada",
                     context_type="VEHICLE",
                     vehicle_plate="ABC1D23",
@@ -116,6 +117,7 @@ async def isolated_incident_database() -> AsyncGenerator[None, None]:
                 IncidentModel(
                     code="NC-2026-086",
                     inspection_id=inspections[1].id,
+                    technician_id=technicians[1].id,
                     inspection_title="Checklist de saída",
                     context_type="VEHICLE",
                     vehicle_plate="DEF4G56",

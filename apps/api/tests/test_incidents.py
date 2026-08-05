@@ -9,6 +9,9 @@ class FakeEvidenceStorage:
     async def upload_bytes(self, content: bytes, object_key: str, content_type: str) -> str:
         return object_key
 
+    async def download_bytes(self, object_key: str) -> tuple[bytes, str]:
+        return b"foto-teste", "image/jpeg"
+
 
 @pytest.mark.asyncio
 async def test_list_incidents(client: AsyncClient) -> None:
@@ -23,7 +26,6 @@ async def test_list_incidents(client: AsyncClient) -> None:
 async def test_create_action_plan_and_resolve(client: AsyncClient) -> None:
     plan_req = {
         "description": "Troca de resina e fibra do degrau rachado",
-        "assignedTo": "Oficina de Escadas Credenciada",
         "dueDate": "2026-07-25T18:00:00Z",
         "createdBy": "Supervisor Operacional",
     }
@@ -31,7 +33,8 @@ async def test_create_action_plan_and_resolve(client: AsyncClient) -> None:
     assert res1.status_code == 200
     data1 = res1.json()
     assert data1["status"] == "PLANO_DE_ACAO"
-    assert data1["actionPlan"]["assignedTo"] == "Oficina de Escadas Credenciada"
+    assert data1["actionPlan"]["assignedTo"] == "João Silva"
+    assert data1["actionPlan"]["assignedTechnicianId"] is not None
 
     technician_login = await client.post(
         "/api/v1/auth/login",
@@ -51,6 +54,15 @@ async def test_create_action_plan_and_resolve(client: AsyncClient) -> None:
         app.dependency_overrides.pop(get_report_storage, None)
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "EM_ANALISE"
+
+    app.dependency_overrides[get_report_storage] = lambda: FakeEvidenceStorage()
+    try:
+        evidence = await client.get("/api/v1/incidents/NC-2026-085/evidence")
+    finally:
+        app.dependency_overrides.pop(get_report_storage, None)
+    assert evidence.status_code == 200
+    assert evidence.headers["content-type"] == "image/jpeg"
+    assert evidence.content == b"foto-teste"
 
     master_login = await client.post(
         "/api/v1/auth/login",
@@ -80,7 +92,6 @@ async def test_audit_nonconformity_uses_the_selected_inspection_question(
             "description": "Divergência identificada durante a auditoria.",
             "severity": "ALTA",
             "actionPlanDescription": "Corrigir a divergência e registrar evidência.",
-            "actionPlanAssignedTo": inspection["technicianName"],
             "actionPlanDueDate": "2026-08-10T18:00:00",
         },
     )
@@ -100,7 +111,6 @@ async def test_audit_nonconformity_uses_the_selected_inspection_question(
             "description": "Tentativa de duplicar a mesma não conformidade.",
             "severity": "ALTA",
             "actionPlanDescription": "Este plano não deve ser criado.",
-            "actionPlanAssignedTo": inspection["technicianName"],
             "actionPlanDueDate": "2026-08-11T18:00:00",
         },
     )
@@ -122,7 +132,6 @@ async def test_manual_nonconformity_requires_plan_and_rejects_duplicate_question
         "description": "Isolamento incompleto.",
         "actionPlan": {
             "description": "Refazer o isolamento e registrar evidência.",
-            "assignedTo": technician["fullName"],
             "dueDate": "2026-08-10T18:00:00",
             "createdBy": "Gestão Operacional",
         },
@@ -132,6 +141,7 @@ async def test_manual_nonconformity_requires_plan_and_rejects_duplicate_question
     assert created.status_code == 201
     assert created.json()["status"] == "PLANO_DE_ACAO"
     assert created.json()["actionPlan"]["description"] == payload["actionPlan"]["description"]
+    assert created.json()["actionPlan"]["assignedTechnicianId"] == technician["id"]
 
     duplicate = await client.post("/api/v1/incidents", json=payload)
     assert duplicate.status_code == 409

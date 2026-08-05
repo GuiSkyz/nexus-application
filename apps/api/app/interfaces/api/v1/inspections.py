@@ -175,7 +175,6 @@ class AuditNonconformityRequest(BaseModel):
     description: str = Field(min_length=3)
     severity: str = "MEDIA"
     actionPlanDescription: str = Field(min_length=3)
-    actionPlanAssignedTo: str = Field(min_length=2)
     actionPlanDueDate: str = Field(min_length=1)
 
 
@@ -432,7 +431,8 @@ async def create_audit_nonconformity(
         ActionPlanModel(
             id=str(uuid4()),
             description=payload.actionPlanDescription,
-            assigned_to=payload.actionPlanAssignedTo,
+            assigned_to=technician.full_name,
+            assigned_technician_id=technician.id,
             due_date=payload.actionPlanDueDate,
             created_by=user.full_name,
         )

@@ -27,6 +27,7 @@ class ActionPlanResponse(BaseModel):
     incidentId: str
     description: str
     assignedTo: str
+    assignedTechnicianId: str | None = None
     dueDate: str
     createdAt: str
     createdBy: str
@@ -56,7 +57,6 @@ class IncidentResponse(BaseModel):
 
 class ActionPlanPayload(BaseModel):
     description: str = Field(min_length=3)
-    assignedTo: str = Field(min_length=2)
     dueDate: str = Field(min_length=1)
     createdBy: str = "Gestão Operacional"
 
@@ -81,7 +81,6 @@ class IncidentPayload(BaseModel):
 
 class CreateActionPlanRequest(BaseModel):
     description: str = Field(min_length=3)
-    assignedTo: str = Field(min_length=2)
     dueDate: str
     createdBy: str = "Supervisor Operacional"
 
@@ -109,6 +108,7 @@ def _action_plan_response(action_plan: ActionPlanModel, incident_code: str) -> A
         incidentId=action_plan.incident_id,
         description=action_plan.description,
         assignedTo=action_plan.assigned_to,
+        assignedTechnicianId=action_plan.assigned_technician_id,
         dueDate=action_plan.due_date,
         createdAt=action_plan.created_at.isoformat(),
         createdBy=action_plan.created_by,
@@ -155,7 +155,8 @@ async def download_incident_evidence(
     user: UserModel = Depends(get_current_user),
     storage: ReportStorage = Depends(get_report_storage),
 ) -> Response:
-    incident = await session.scalar(select(IncidentModel).where(IncidentModel.code == incident_code))
+    result = await session.execute(_statement().where(IncidentModel.code == incident_code))
+    incident = result.scalar_one_or_none()
     if user.role == "TECNICO" and incident and incident.technician_id != user.id:
         raise HTTPException(status_code=403, detail="Sem acesso a esta evidência.")
     if not incident or not incident.action_plans or not incident.action_plans[0].evidence_photo_url:
@@ -242,7 +243,8 @@ async def create_incident(
         ActionPlanModel(
             id=str(uuid.uuid4()),
             description=request.actionPlan.description,
-            assigned_to=request.actionPlan.assignedTo,
+            assigned_to=technician.full_name,
+            assigned_technician_id=technician.id,
             due_date=request.actionPlan.dueDate,
             created_by=request.actionPlan.createdBy,
         )
@@ -314,7 +316,8 @@ async def create_action_plan(
     if incident.action_plans:
         plan = incident.action_plans[0]
         plan.description = request.description
-        plan.assigned_to = request.assignedTo
+        plan.assigned_to = incident.technician_name
+        plan.assigned_technician_id = incident.technician_id
         plan.due_date = request.dueDate
         plan.created_by = request.createdBy
     else:
@@ -322,7 +325,8 @@ async def create_action_plan(
             ActionPlanModel(
                 id=str(uuid.uuid4()),
                 description=request.description,
-                assigned_to=request.assignedTo,
+                assigned_to=incident.technician_name,
+                assigned_technician_id=incident.technician_id,
                 due_date=request.dueDate,
                 created_by=request.createdBy,
             )

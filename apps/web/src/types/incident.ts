@@ -12,6 +12,7 @@ export interface ActionPlan {
   incidentId: string;
   description: string;
   assignedTo: string; // Ex: "Oficina Credenciada / Manutenção Frota"
+  assignedTechnicianId?: string;
   dueDate: string;
   createdAt: string;
   createdBy: string;

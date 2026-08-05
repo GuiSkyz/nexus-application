@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Edit, Plus, Search, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Edit, Eye, Plus, Search, Trash2, Wrench } from "lucide-react";
 
 import { AppHeader } from "@/components/nexus/app-header";
 import { Dialog } from "@/components/nexus/dialog";
@@ -31,12 +31,13 @@ export default function IncidentsPage() {
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [editing, setEditing] = useState<Partial<Incident> | null>(null);
   const [planIncident, setPlanIncident] = useState<Incident | null>(null);
-  const [plan, setPlan] = useState({ description: "", assignedTo: "", dueDate: "" });
+  const [plan, setPlan] = useState({ description: "", dueDate: "" });
   const [feedback, setFeedback] = useState("");
   const [successDialog, setSuccessDialog] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Incident | null>(null);
   const [returnTarget, setReturnTarget] = useState<Incident | null>(null);
   const [returnNotes, setReturnNotes] = useState("");
+  const [detailIncident, setDetailIncident] = useState<Incident | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -76,7 +77,7 @@ export default function IncidentsPage() {
         ...(isNew ? { actionPlan: { ...plan, createdBy: "Gestão Operacional" } } : {}),
       });
       setEditing(null);
-      setPlan({ description: "", assignedTo: "", dueDate: "" });
+      setPlan({ description: "", dueDate: "" });
       await load();
       if (isNew) setSuccessDialog("Não conformidade aberta com sucesso. O plano de ação já foi enviado ao técnico responsável.");
     } catch (error) {
@@ -125,7 +126,7 @@ export default function IncidentsPage() {
     try {
       await ApiClient.createActionPlan(planIncident.id, { ...plan, createdBy: "Gestão Operacional" });
       setPlanIncident(null);
-      setPlan({ description: "", assignedTo: "", dueDate: "" });
+      setPlan({ description: "", dueDate: "" });
       await load();
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Não foi possível salvar o plano.");
@@ -145,7 +146,7 @@ export default function IncidentsPage() {
             <h1 className="text-xl font-bold text-text-primary">Tratamento de não conformidades</h1>
             <p className="mt-1 text-sm text-text-secondary">Registre desvios, atribua responsáveis e acompanhe a resolução.</p>
           </div>
-          {!isTechnician && <button onClick={() => { setPlan({ description: "", assignedTo: "", dueDate: "" }); setEditing({ ...emptyIncident }); }} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-nexus-blue-600 px-4 text-xs font-bold text-white hover:bg-nexus-blue-700">
+          {!isTechnician && <button onClick={() => { setPlan({ description: "", dueDate: "" }); setEditing({ ...emptyIncident }); }} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-nexus-blue-600 px-4 text-xs font-bold text-white hover:bg-nexus-blue-700">
             <Plus className="h-4 w-4" /> Registrar NC
           </button>}
         </section>
@@ -185,7 +186,7 @@ export default function IncidentsPage() {
                   <div className="text-xs text-text-secondary">
                     {incident.actionPlan ? <>
                       <p className="font-semibold text-text-primary">{incident.actionPlan.description}</p>
-                      <p className="mt-1">Responsável: {incident.actionPlan.assignedTo} · Prazo: {new Date(incident.actionPlan.dueDate).toLocaleString("pt-BR")}</p>
+                      <p className="mt-1">Responsável: {incident.actionPlan.assignedTo} · ID: {incident.actionPlan.assignedTechnicianId || "Legado"} · Prazo: {new Date(incident.actionPlan.dueDate).toLocaleString("pt-BR")}</p>
                       {incident.actionPlan.evidencePhotoUrl && <a href={apiUrl(incident.actionPlan.evidencePhotoUrl)} target="_blank" rel="noreferrer" className="mt-1 inline-block font-semibold text-nexus-blue-700">Ver foto enviada</a>}
                     </> : "Sem plano atribuído"}
                   </div>
@@ -194,6 +195,7 @@ export default function IncidentsPage() {
                     <Badge value={incident.status.replaceAll("_", " ")} />
                   </div>
                   {!isTechnician && <div className="flex justify-end gap-1">
+                    <button onClick={() => setDetailIncident(incident)} className="rounded p-2 text-text-secondary hover:bg-surface-muted hover:text-nexus-blue-700" title="Visualizar não conformidade"><Eye className="h-4 w-4" /></button>
                     <button onClick={() => setEditing({ ...incident })} className="rounded p-2 text-text-secondary hover:bg-surface-muted" title="Editar"><Edit className="h-4 w-4" /></button>
                     {incident.status !== "RESOLVIDA" && <button onClick={() => setPlanIncident(incident)} className="rounded p-2 text-text-secondary hover:bg-warning-soft hover:text-warning-foreground" title="Plano de ação"><Wrench className="h-4 w-4" /></button>}
                     {incident.status === "EM_ANALISE" && <><button onClick={() => void resolveIncident(incident)} className="rounded p-2 text-text-secondary hover:bg-success-soft hover:text-success-foreground" title="Aprovar correção"><CheckCircle2 className="h-4 w-4" /></button><button onClick={() => { setReturnNotes(""); setReturnTarget(incident); }} className="rounded p-2 text-text-secondary hover:bg-danger-soft hover:text-danger-foreground" title="Devolver para ajuste"><AlertTriangle className="h-4 w-4" /></button></>}
@@ -217,7 +219,7 @@ export default function IncidentsPage() {
             </div>
             <Field label="Desvio identificado"><input required value={editing.questionText || ""} onChange={(e) => setEditing({ ...editing, questionText: e.target.value })} /></Field>
             <Field label="Descrição"><textarea rows={3} value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} /></Field>
-            {!editing.id && <fieldset className="grid gap-3 rounded-lg border border-nexus-blue-100 bg-nexus-blue-50/40 p-4 md:grid-cols-2"><legend className="px-1 text-sm font-bold text-nexus-blue-800">Plano de ação</legend><Field label="Ação corretiva"><textarea required rows={3} value={plan.description} onChange={(e) => setPlan({ ...plan, description: e.target.value })} /></Field><Field label="Responsável"><input required value={plan.assignedTo} onChange={(e) => setPlan({ ...plan, assignedTo: e.target.value })} /></Field><Field label="Prazo"><input required type="datetime-local" value={plan.dueDate} onChange={(e) => setPlan({ ...plan, dueDate: e.target.value })} /></Field></fieldset>}
+            {!editing.id && <fieldset className="grid gap-3 rounded-lg border border-nexus-blue-100 bg-nexus-blue-50/40 p-4 md:grid-cols-2"><legend className="px-1 text-sm font-bold text-nexus-blue-800">Plano de ação</legend><Field label="Ação corretiva"><textarea required rows={3} value={plan.description} onChange={(e) => setPlan({ ...plan, description: e.target.value })} /></Field><Field label="Técnico responsável"><input readOnly value={selectedTechnician ? `${selectedTechnician.fullName} · ID ${selectedTechnician.id}` : "Selecione o técnico acima"} className="bg-surface-muted text-text-secondary" /></Field><Field label="Prazo"><input required type="datetime-local" value={plan.dueDate} onChange={(e) => setPlan({ ...plan, dueDate: e.target.value })} /></Field></fieldset>}
             <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditing(null)} className="rounded-md border px-4 py-2 text-xs font-bold">Cancelar</button><button className="rounded-md bg-nexus-blue-600 px-4 py-2 text-xs font-bold text-white">Salvar</button></div>
           </form>
         )}
@@ -226,10 +228,19 @@ export default function IncidentsPage() {
       <Dialog open={Boolean(planIncident)} title={`Plano de ação${planIncident ? ` · ${planIncident.id}` : ""}`} onClose={() => setPlanIncident(null)}>
           <form onSubmit={savePlan} className="space-y-4">
             <Field label="Ação corretiva"><textarea required rows={3} value={plan.description} onChange={(e) => setPlan({ ...plan, description: e.target.value })} /></Field>
-            <Field label="Responsável"><input required value={plan.assignedTo} onChange={(e) => setPlan({ ...plan, assignedTo: e.target.value })} /></Field>
+            <Field label="Técnico responsável"><input readOnly value={planIncident?.technicianName || "Técnico da não conformidade"} className="bg-surface-muted text-text-secondary" /></Field>
             <Field label="Prazo"><input required type="datetime-local" value={plan.dueDate} onChange={(e) => setPlan({ ...plan, dueDate: e.target.value })} /></Field>
             <div className="flex justify-end gap-2"><button type="button" onClick={() => setPlanIncident(null)} className="rounded-md border px-4 py-2 text-xs font-bold">Cancelar</button><button className="rounded-md bg-nexus-blue-600 px-4 py-2 text-xs font-bold text-white">Atribuir plano</button></div>
           </form>
+      </Dialog>
+      <Dialog open={Boolean(detailIncident)} title={`Não conformidade${detailIncident ? ` · ${detailIncident.id}` : ""}`} onClose={() => setDetailIncident(null)} width="lg">
+        {detailIncident && <div className="space-y-4 text-sm">
+          <section className="space-y-1"><p className="font-semibold text-text-primary">Pergunta</p><p className="text-text-secondary">{detailIncident.questionText}</p></section>
+          <section className="space-y-1"><p className="font-semibold text-text-primary">Descrição do desvio</p><p className="whitespace-pre-wrap text-text-secondary">{detailIncident.description || "Sem descrição informada."}</p></section>
+          <section className="rounded-lg bg-surface-muted p-4"><p className="font-semibold text-text-primary">Plano de ação</p>{detailIncident.actionPlan ? <div className="mt-2 space-y-1 text-text-secondary"><p>{detailIncident.actionPlan.description}</p><p>Responsável: {detailIncident.actionPlan.assignedTo}</p><p>ID do técnico: {detailIncident.actionPlan.assignedTechnicianId || "Registro legado"}</p><p>Prazo: {new Date(detailIncident.actionPlan.dueDate).toLocaleString("pt-BR")}</p></div> : <p className="mt-2 text-text-secondary">Plano ainda não atribuído.</p>}</section>
+          {detailIncident.actionPlan?.resolutionNotes && <section className="space-y-1"><p className="font-semibold text-text-primary">Descrição enviada pelo técnico</p><p className="whitespace-pre-wrap text-text-secondary">{detailIncident.actionPlan.resolutionNotes}</p></section>}
+          {detailIncident.actionPlan?.evidencePhotoUrl && <section className="space-y-2"><p className="font-semibold text-text-primary">Foto da evidência</p><a href={apiUrl(detailIncident.actionPlan.evidencePhotoUrl)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border bg-surface-muted"><img src={apiUrl(detailIncident.actionPlan.evidencePhotoUrl)} alt={`Evidência da ${detailIncident.id}`} className="max-h-80 w-full object-contain" /></a><a href={apiUrl(detailIncident.actionPlan.evidencePhotoUrl)} target="_blank" rel="noreferrer" className="inline-block text-xs font-bold text-nexus-blue-700">Abrir foto em tamanho maior</a></section>}
+        </div>}
       </Dialog>
       <Dialog open={Boolean(returnTarget)} title="Devolver para ajuste" onClose={() => setReturnTarget(null)}><p className="text-sm text-text-secondary">Informe o ajuste necessário para o técnico responsável.</p><textarea value={returnNotes} onChange={(event) => setReturnNotes(event.target.value)} rows={3} className="mt-3 w-full rounded-md border p-3 text-sm" placeholder="Descreva o ajuste solicitado" /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setReturnTarget(null)} className="rounded-md border px-4 py-2 text-xs font-bold">Cancelar</button><button type="button" disabled={!returnNotes.trim()} onClick={() => void returnForCorrection()} className="rounded-md bg-danger-foreground px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Devolver ao técnico</button></div></Dialog>
       <Dialog open={Boolean(deleteTarget)} title="Excluir não conformidade" onClose={() => setDeleteTarget(null)}><p className="text-sm text-text-secondary">Esta ação remove a NC e seu plano de ação. Deseja continuar?</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-md border px-4 py-2 text-xs font-bold">Cancelar</button><button type="button" onClick={() => void deleteIncident()} className="rounded-md bg-danger-foreground px-4 py-2 text-xs font-bold text-white">Excluir</button></div></Dialog>

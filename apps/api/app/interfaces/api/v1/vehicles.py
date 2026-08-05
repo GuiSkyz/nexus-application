@@ -61,6 +61,11 @@ async def _validate_assignments(
         )
         if not checklist or checklist.status != "published":
             raise HTTPException(status_code=422, detail="Checklist publicado inválido.")
+        if checklist.distribution_scope != "VEHICLE":
+            raise HTTPException(
+                status_code=422,
+                detail="Este checklist não utiliza atribuição por veículo.",
+            )
         if checklist.category != payload.category:
             raise HTTPException(
                 status_code=422,
@@ -182,6 +187,8 @@ async def batch_assign(
         raise HTTPException(
             status_code=422, detail="Selecione um checklist publicado válido."
         )
+    if checklist.distribution_scope != "VEHICLE":
+        raise HTTPException(status_code=422, detail="Este checklist não utiliza atribuição por veículo.")
     result = await session.execute(
         select(VehicleModel).where(VehicleModel.id.in_(request.vehicleIds))
     )

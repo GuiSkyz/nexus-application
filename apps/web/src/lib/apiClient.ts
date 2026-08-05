@@ -9,6 +9,7 @@ import { ReadinessResponse } from "@/types/status";
 import { Technician, TechnicianPayload } from "@/types/technician";
 import { Vehicle } from "@/types/vehicle";
 import { ManagedUser, ManagedUserPayload } from "@/types/user";
+import { AuditInspectionDetail, AuditInspectionSummary } from "@/types/audit";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -194,6 +195,14 @@ export class ApiClient {
 
   static fetchChecklists() {
     return request<ChecklistTemplate[]>("/checklists");
+  }
+
+  static fetchAuditInspections() {
+    return request<AuditInspectionSummary[]>("/inspections/audit");
+  }
+
+  static fetchAuditInspection(id: string) {
+    return request<AuditInspectionDetail>(`/inspections/audit/${id}`);
   }
 
   static fetchChecklist(id: string) {

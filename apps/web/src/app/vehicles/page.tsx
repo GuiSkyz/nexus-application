@@ -61,7 +61,7 @@ export default function VehiclesPage() {
         ApiClient.fetchChecklists(),
         ApiClient.fetchTechnicians(),
       ]);
-      const published = checklistData.filter((template) => template.status === "published");
+      const published = checklistData.filter((template) => template.status === "published" && template.distributionScope === "VEHICLE");
       setTemplates(published);
       setTechnicians(technicianData.filter((technician) => technician.isActive));
       if (published.length > 0) {

@@ -9,6 +9,7 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -31,6 +32,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
   onSaveSuccess,
 }) => {
   const [answers, setAnswers] = useState<Record<string, ChecklistAnswerValue>>(inspection.answers || {});
+  const [justifications, setJustifications] = useState<Record<string, string>>(inspection.justifications || {});
   const [evidences, setEvidences] = useState<EvidencePhoto[]>(inspection.evidences || []);
   const [notes, setNotes] = useState<string>(inspection.notes || "");
   const [saving, setSaving] = useState<boolean>(false);
@@ -52,7 +54,24 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       !(question.requirePhoto || question.type === "photo") ||
       evidences.some((evidence) => evidence.questionId === question.id),
   );
-  const isComplete = requiredAnswersComplete && requiredPhotosComplete;
+  const requiredJustificationsComplete = inspection.questions.every(
+    (question) =>
+      !question.requireJustification ||
+      !hasAnswer(answers[question.id]) ||
+      Boolean(justifications[question.id]?.trim()),
+  );
+  const isComplete = requiredAnswersComplete && requiredPhotosComplete && requiredJustificationsComplete;
+  const requiredPendingCount = inspection.questions.filter((question) => {
+    const missingAnswer = question.isRequired && !hasAnswer(answers[question.id]);
+    const missingPhoto =
+      (question.requirePhoto || question.type === "photo") &&
+      !evidences.some((evidence) => evidence.questionId === question.id);
+    const missingJustification =
+      Boolean(question.requireJustification) &&
+      hasAnswer(answers[question.id]) &&
+      !justifications[question.id]?.trim();
+    return missingAnswer || missingPhoto || missingJustification;
+  }).length;
 
   // Verificar se há respostas "NÃO CONFORME"
   const hasNonConformity = Object.values(answers).some((answer) => answer === "NAO_CONFORME");
@@ -164,6 +183,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
       const payload: Inspection = {
         ...inspection,
         answers,
+        justifications,
         evidences,
         notes,
         status: isComplete ? "COMPLETED" : "IN_PROGRESS",
@@ -185,6 +205,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.navy[950]} translucent={false} />
       {/* Top Header responsivo com insets do Android/iOS */}
       <View style={styles.topHeader}>
         <View style={styles.headerNavRow}>
@@ -295,6 +316,11 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                 {isCategoryActive && categoryQuestions.map((q: ChecklistQuestion, index: number) => {
                   const currentAnswer = answers[q.id];
                   const isSelectedNok = currentAnswer === "NAO_CONFORME";
+                  const showJustification = q.requireJustification || isSelectedNok;
+                  const isJustificationMissing =
+                    Boolean(q.requireJustification) &&
+                    hasAnswer(currentAnswer) &&
+                    !justifications[q.id]?.trim();
 
                   return (
                     <View key={q.id} style={styles.questionCard}>
@@ -317,6 +343,36 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
                       </View>
 
                       {renderAnswerControl(q)}
+
+                      {showJustification && (
+                        <View style={styles.justificationBlock}>
+                          <View style={styles.justificationHeader}>
+                            <Text style={styles.justificationLabel}>
+                              {q.requireJustification ? "Justificativa obrigatória" : "Detalhe da não conformidade"}
+                            </Text>
+                            {isJustificationMissing && (
+                              <Text style={styles.justificationRequiredHint}>Pendente</Text>
+                            )}
+                          </View>
+                          <TextInput
+                            style={[
+                              styles.justificationInput,
+                              isJustificationMissing && styles.justificationInputError,
+                            ]}
+                            multiline
+                            textAlignVertical="top"
+                            value={justifications[q.id] || ""}
+                            onChangeText={(value) =>
+                              setJustifications((current) => ({
+                                ...current,
+                                [q.id]: value,
+                              }))
+                            }
+                            placeholder="Descreva o motivo, condição encontrada ou orientação tomada..."
+                            placeholderTextColor={colors.text.muted}
+                          />
+                        </View>
+                      )}
 
                       {/* Alerta de NC se marcado Não */}
                       {isSelectedNok && (
@@ -381,7 +437,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
             disabled={saving}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={isComplete ? "Concluir e salvar inspeção" : `Salvar checklist com ${pendingCount} itens pendentes`}
+            accessibilityLabel={isComplete ? "Concluir e salvar inspeção" : `Salvar checklist com ${requiredPendingCount || pendingCount} itens pendentes`}
           >
             {saving ? (
               <ActivityIndicator color={colors.text.inverse} size="small" />
@@ -389,7 +445,7 @@ export const InspectionDetailScreen: React.FC<InspectionDetailScreenProps> = ({
               <Text style={styles.mainSaveBtnText}>
                 {isComplete
                   ? "✓ Concluir Inspeção"
-                  : `Concluir Checklist (${pendingCount} pendentes)`}
+                  : `Concluir Checklist (${requiredPendingCount || pendingCount} pendentes)`}
               </Text>
             )}
           </TouchableOpacity>
@@ -406,17 +462,17 @@ const styles = StyleSheet.create({
   },
   topHeader: {
     backgroundColor: colors.navy[950],
-    paddingTop: getResponsivePaddingTop(16),
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[7] + 24, // Extra padding for the overlapping card
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingTop: getResponsivePaddingTop(8),
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[5],
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   headerNavRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: spacing[4],
+    marginBottom: spacing[3],
   },
   backBtn: {
     paddingVertical: 4,
@@ -446,15 +502,15 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     color: colors.text.inverse,
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: "800",
-    lineHeight: 28,
+    lineHeight: 24,
   },
   screenSubtitle: {
     color: "rgba(214, 224, 239, 0.8)",
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 4,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   statusBadgeCompleted: {
     backgroundColor: colors.success.soft,
@@ -490,10 +546,10 @@ const styles = StyleSheet.create({
   progressCard: {
     backgroundColor: colors.surface.card,
     borderRadius: radius.xl,
-    padding: spacing[4],
-    marginHorizontal: spacing[5],
-    marginTop: -40, // Negative margin to overlap the header
-    marginBottom: spacing[5],
+    padding: spacing[3],
+    marginHorizontal: spacing[4],
+    marginTop: -12,
+    marginBottom: spacing[4],
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.8)",
     ...shadow.md,
@@ -730,6 +786,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 16,
+  },
+  justificationBlock: {
+    marginTop: spacing[3],
+  },
+  justificationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  justificationLabel: {
+    color: colors.text.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  justificationRequiredHint: {
+    color: colors.danger.foreground,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  justificationInput: {
+    minHeight: 86,
+    paddingHorizontal: spacing[3],
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border.strong,
+    borderRadius: radius.md,
+    color: colors.text.primary,
+    fontSize: 14,
+    lineHeight: 19,
+    backgroundColor: colors.surface.card,
+  },
+  justificationInputError: {
+    borderColor: colors.danger.DEFAULT,
+    backgroundColor: colors.danger.soft,
   },
   dashedPhotoBox: {
     backgroundColor: colors.blue[50],

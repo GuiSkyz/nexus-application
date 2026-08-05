@@ -48,6 +48,7 @@ class ChecklistPayload(BaseModel):
     category: str = Field(min_length=2, max_length=100)
     description: str | None = None
     createdBy: str = "Coordenação Operacional"
+    distributionScope: str = "INDIVIDUAL"
     sections: list[SectionPayload] = Field(default_factory=list)
 
 
@@ -65,6 +66,7 @@ class ChecklistResponse(BaseModel):
     templateId: str
     title: str
     category: str
+    distributionScope: str
     description: str | None
     status: str
     version: int
@@ -92,6 +94,7 @@ def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
         templateId=template.template_family_id,
         title=template.title,
         category=template.category,
+        distributionScope=template.distribution_scope,
         description=template.description,
         status=template.status,
         version=template.version,
@@ -196,10 +199,13 @@ async def create_checklist(
 ) -> ChecklistResponse:
     if payload.category not in OPERATIONAL_CATEGORIES:
         raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
+    if payload.distributionScope not in {"CATEGORY", "VEHICLE", "INDIVIDUAL"}:
+        raise HTTPException(status_code=422, detail="Tipo de distribuição inválido.")
     template = ChecklistTemplateModel(
         template_family_id=f"tpl-{uuid4().hex[:8]}",
         title=payload.title.strip(),
         category=payload.category.strip(),
+        distribution_scope=payload.distributionScope,
         description=payload.description,
         status="draft",
         version=1,
@@ -224,6 +230,8 @@ async def update_checklist(
 ) -> ChecklistResponse:
     if payload.category not in OPERATIONAL_CATEGORIES:
         raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
+    if payload.distributionScope not in {"CATEGORY", "VEHICLE", "INDIVIDUAL"}:
+        raise HTTPException(status_code=422, detail="Tipo de distribuição inválido.")
     result = await session.execute(
         _statement().where(ChecklistTemplateModel.id == checklist_id)
     )
@@ -237,6 +245,7 @@ async def update_checklist(
         )
     template.title = payload.title.strip()
     template.category = payload.category.strip()
+    template.distribution_scope = payload.distributionScope
     template.description = payload.description
     _apply_sections(template, payload.sections)
     await session.commit()
@@ -288,6 +297,8 @@ async def assign_technicians(
             status_code=422,
             detail="Publique o checklist antes de atribuí-lo aos técnicos.",
         )
+    if template.distribution_scope != "INDIVIDUAL":
+        raise HTTPException(status_code=422, detail="Este checklist não utiliza atribuição individual.")
     if payload.frequency not in {"DAILY", "WEEKLY", "ON_DEMAND"}:
         raise HTTPException(status_code=422, detail="Periodicidade de checklist inválida.")
 
@@ -361,6 +372,7 @@ async def duplicate_checklist(
         template_family_id=f"tpl-{uuid4().hex[:8]}",
         title=f"Cópia de {source.title}",
         category=source.category,
+        distribution_scope=source.distribution_scope,
         description=source.description,
         status="draft",
         version=1,

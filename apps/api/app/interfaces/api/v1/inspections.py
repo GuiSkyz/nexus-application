@@ -140,6 +140,35 @@ class InspectionReportResponse(BaseModel):
     downloadUrl: str | None = None
 
 
+class AuditInspectionSummary(BaseModel):
+    id: str
+    title: str
+    technicianName: str
+    vehiclePlate: str | None = None
+    completedAt: str
+    answerCount: int
+    evidenceCount: int
+
+
+class AuditAnswer(BaseModel):
+    questionId: str
+    questionText: str
+    answerValue: str
+
+
+class AuditEvidence(BaseModel):
+    id: str
+    photoUrl: str
+    capturedAt: str
+    description: str | None = None
+
+
+class AuditInspectionDetail(AuditInspectionSummary):
+    notes: str | None = None
+    answers: list[AuditAnswer]
+    evidences: list[AuditEvidence]
+
+
 def _parse_datetime(value: str | None) -> datetime:
     if not value:
         return datetime.now(UTC)
@@ -171,6 +200,92 @@ def _decode_evidence(data_url: str) -> tuple[bytes, str, str]:
             status_code=413, detail="Cada evidência deve ter no máximo 8 MB."
         )
     return content, content_type, extension
+
+
+def _ensure_audit_access(user: UserModel) -> None:
+    if user.role == "TECNICO":
+        raise HTTPException(status_code=403, detail="Acesso de auditoria restrito à gestão.")
+
+
+@router.get("/audit", response_model=list[AuditInspectionSummary])
+async def list_audit_inspections(
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[AuditInspectionSummary]:
+    _ensure_audit_access(user)
+    result = await session.execute(
+        select(InspectionModel)
+        .options(selectinload(InspectionModel.answers), selectinload(InspectionModel.evidences))
+        .order_by(InspectionModel.completed_at.desc(), InspectionModel.created_at.desc())
+        .limit(200)
+    )
+    return [
+        AuditInspectionSummary(
+            id=item.id,
+            title=item.title,
+            technicianName=item.technician_name,
+            vehiclePlate=item.vehicle_plate,
+            completedAt=(item.completed_at or item.created_at).isoformat(),
+            answerCount=len(item.answers),
+            evidenceCount=len(item.evidences),
+        )
+        for item in result.scalars().unique().all()
+    ]
+
+
+@router.get("/audit/{inspection_id}", response_model=AuditInspectionDetail)
+async def get_audit_inspection(
+    inspection_id: str,
+    user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    storage: ReportStorage = Depends(get_report_storage),
+) -> AuditInspectionDetail:
+    _ensure_audit_access(user)
+    result = await session.execute(
+        select(InspectionModel)
+        .options(selectinload(InspectionModel.answers), selectinload(InspectionModel.evidences))
+        .where(InspectionModel.id == inspection_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist preenchido não encontrado.")
+    template_result = await session.execute(
+        select(ChecklistTemplateModel)
+        .options(
+            selectinload(ChecklistTemplateModel.sections).selectinload(
+                ChecklistSectionModel.questions
+            )
+        )
+        .where(ChecklistTemplateModel.id == item.template_id)
+    )
+    template = template_result.scalar_one_or_none()
+    question_texts = {
+        question.id: question.question_text
+        for section in (template.sections if template else [])
+        for question in section.questions
+    }
+    return AuditInspectionDetail(
+        id=item.id,
+        title=item.title,
+        technicianName=item.technician_name,
+        vehiclePlate=item.vehicle_plate,
+        completedAt=(item.completed_at or item.created_at).isoformat(),
+        answerCount=len(item.answers),
+        evidenceCount=len(item.evidences),
+        notes=item.notes,
+        answers=[
+            AuditAnswer(
+                questionId=answer.question_id,
+                questionText=question_texts.get(answer.question_id, "Pergunta original indisponível"),
+                answerValue=answer.answer_value,
+            )
+            for answer in item.answers
+        ],
+        evidences=[
+            AuditEvidence(id=evidence.id, photoUrl=await storage.generate_download_url(evidence.photo_url), capturedAt=evidence.captured_at, description=evidence.description)
+            for evidence in item.evidences
+        ],
+    )
 
 
 @router.get("/mobile-context")
@@ -214,7 +329,13 @@ async def get_mobile_context(
             )
         )
         .where(ChecklistTemplateModel.status == "published")
-        .where(ChecklistTemplateModel.id.in_(assigned_template_ids))
+        .where(
+            (ChecklistTemplateModel.id.in_(assigned_template_ids))
+            | (
+                (ChecklistTemplateModel.distribution_scope == "CATEGORY")
+                & (ChecklistTemplateModel.category == user.operational_category)
+            )
+        )
         .order_by(ChecklistTemplateModel.updated_at.desc())
     )
     checklists = checklist_result.scalars().unique().all()
@@ -308,7 +429,10 @@ async def get_mobile_context(
                         else "INDIVIDUAL"
                     )
                 ),
-                "isRequired": checklist.id in assigned_template_ids,
+                "isRequired": (
+                    checklist.id in assigned_template_ids
+                    or checklist.distribution_scope == "CATEGORY"
+                ),
                 "frequency": technician_frequencies.get(checklist.id, "DAILY"),
                 "state": (
                     "COMPLETED"
@@ -447,6 +571,7 @@ async def _persist_inspection(
 
     questions = payload.get("questions") or []
     answers = payload.get("answers") or {}
+    justifications = payload.get("justifications") or {}
     question_by_id = {
         str(question.get("id")): question
         for question in questions
@@ -458,12 +583,14 @@ async def _persist_inspection(
                 inspection_id=inspection.id,
                 question_id=str(question_id),
                 answer_value=str(answer),
+                notes=justifications.get(str(question_id)),
             )
         )
         if answer != "NAO_CONFORME":
             continue
         question = question_by_id.get(str(question_id), {})
         category = str(question.get("category") or "Geral")
+        justification = str(justifications.get(str(question_id)) or "").strip()
         session.add(
             IncidentModel(
                 code=(
@@ -492,7 +619,10 @@ async def _persist_inspection(
                     else "MEDIA"
                 ),
                 status="ABERTA",
-                description="Detectado automaticamente na inspeção mobile.",
+                description=(
+                    justification
+                    or "Detectado automaticamente na inspeção mobile."
+                ),
             )
         )
 

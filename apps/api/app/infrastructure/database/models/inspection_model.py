@@ -57,6 +57,7 @@ class InspectionAnswerModel(Base):
     )
     question_id: Mapped[str] = mapped_column(String(36), nullable=False)
     answer_value: Mapped[str] = mapped_column(String(100), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     inspection: Mapped["InspectionModel"] = relationship(
         "InspectionModel", back_populates="answers"

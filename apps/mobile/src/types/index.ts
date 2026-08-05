@@ -135,6 +135,7 @@ export interface ContextualChecklist {
   completedAt?: string;
   questions: ChecklistQuestion[];
   answers: Record<string, ChecklistAnswerValue>;
+  justifications?: Record<string, string>;
   evidences: EvidencePhoto[];
   notes?: string;
 }
@@ -153,6 +154,7 @@ export interface Inspection {
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   questions: ChecklistQuestion[];
   answers: Record<string, ChecklistAnswerValue>;
+  justifications?: Record<string, string>;
   evidences: EvidencePhoto[];
   notes?: string;
   signature?: DigitalSignature;

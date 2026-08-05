@@ -85,7 +85,7 @@ export default function ChecklistsPage() {
     }
   };
 
-  const publishedTemplates = templates.filter((template) => template.status === "published");
+  const publishedTemplates = templates.filter((template) => template.status === "published" && template.distributionScope === "INDIVIDUAL");
   const selectedChecklist = publishedTemplates.find((template) => template.id === selectedChecklistId);
 
   const toggleTechnician = (id: string) => {

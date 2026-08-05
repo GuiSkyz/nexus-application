@@ -6,6 +6,8 @@ import Link from "next/link";
 import { AppHeader } from "@/components/nexus/app-header";
 import { useRole } from "@/components/nexus/role-selector";
 import { ApiClient } from "@/lib/apiClient";
+import { Technician } from "@/types/technician";
+import { Vehicle } from "@/types/vehicle";
 import {
   ChecklistTemplate,
   ChecklistSection,
@@ -47,6 +49,7 @@ function BuilderContent() {
     templateId: "",
     title: "",
     category: "INSTALACAO_MANUTENCAO",
+    distributionScope: "INDIVIDUAL",
     description: "",
     status: "draft",
     version: 1,
@@ -80,8 +83,15 @@ function BuilderContent() {
 
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
 
   useEffect(() => {
+    Promise.all([ApiClient.fetchTechnicians(), ApiClient.fetchVehicles()]).then(([technicianData, vehicleData]) => {
+      setTechnicians(technicianData.filter((item) => item.isActive));
+      setVehicles(vehicleData);
+    });
     if (!editId) return;
     ApiClient.fetchChecklist(editId)
       .then((existing) => setTemplate(existing))
@@ -203,8 +213,18 @@ function BuilderContent() {
     }
 
     try {
+      if (template.distributionScope !== "CATEGORY" && !selectedRecipientIds.length) {
+        showNotification("error", "Selecione ao menos um responsável antes de publicar.");
+        return;
+      }
       const saved = await ApiClient.saveChecklist({ ...template, createdBy: activeUser });
       await ApiClient.publishChecklist(saved.id);
+      if (template.distributionScope === "INDIVIDUAL") {
+        await ApiClient.assignChecklistToTechnicians(saved.id, selectedRecipientIds, "DAILY");
+      }
+      if (template.distributionScope === "VEHICLE") {
+        await ApiClient.batchAssignVehicles(saved.id, selectedRecipientIds);
+      }
       showNotification("success", "Checklist publicado com sucesso!");
       setTimeout(() => router.push("/checklists"), 1000);
     } catch (e) {
@@ -396,7 +416,16 @@ function BuilderContent() {
                     <option value="INFRAESTRUTURA">Infraestrutura</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Distribuição do checklist</label>
+                  <select value={template.distributionScope} onChange={(e) => { setTemplate({ ...template, distributionScope: e.target.value as ChecklistTemplate["distributionScope"] }); setSelectedRecipientIds([]); }} className="w-full p-2.5 border rounded-md text-xs outline-none focus:border-blue-600" style={{ borderColor: "var(--border-default)" }}>
+                    <option value="CATEGORY">Por categoria — todos os técnicos da categoria</option>
+                    <option value="VEHICLE">Por carro — técnico responsável pelo veículo</option>
+                    <option value="INDIVIDUAL">Individual — técnico específico</option>
+                  </select>
+                </div>
               </div>
+              {template.distributionScope !== "CATEGORY" && <div className="rounded-md border bg-slate-50 p-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-bold text-slate-800">{template.distributionScope === "VEHICLE" ? "Carros responsáveis" : "Técnicos responsáveis"} ({selectedRecipientIds.length})</p><button type="button" onClick={() => setSelectedRecipientIds([])} className="text-[11px] font-semibold text-blue-700">Limpar</button></div><div className="max-h-40 space-y-1 overflow-y-auto">{template.distributionScope === "VEHICLE" ? vehicles.filter((item) => item.category === template.category).map((item) => <label key={item.id} className="flex items-center gap-2 rounded bg-white px-2 py-2 text-xs"><input type="checkbox" checked={selectedRecipientIds.includes(item.id)} onChange={() => setSelectedRecipientIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />{item.model} · {item.plate}</label>) : technicians.filter((item) => item.operationalCategory === template.category).map((item) => <label key={item.id} className="flex items-center gap-2 rounded bg-white px-2 py-2 text-xs"><input type="checkbox" checked={selectedRecipientIds.includes(item.id)} onChange={() => setSelectedRecipientIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />{item.fullName} · {item.teamName || "Sem equipe"}</label>)}</div></div>}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1 text-xs">Descrição / Instruções do Checklist</label>
                 <textarea

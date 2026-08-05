@@ -7,6 +7,7 @@ export type UserRole =
   | "MASTER";
 
 export type ChecklistStatus = "draft" | "published" | "archived";
+export type ChecklistDistributionScope = "CATEGORY" | "VEHICLE" | "INDIVIDUAL";
 
 export type QuestionType =
   | "yes_no"
@@ -50,6 +51,7 @@ export interface ChecklistTemplate {
   templateId: string; // ID fixo da família do template, Ex: "tpl-101"
   title: string;
   category: string;
+  distributionScope: ChecklistDistributionScope;
   description?: string;
   status: ChecklistStatus;
   version: number; // Ex: 1, 2, 3

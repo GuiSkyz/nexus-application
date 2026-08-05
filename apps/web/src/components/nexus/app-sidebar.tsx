@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   AlertTriangle,
   ClipboardCheck,
+  ClipboardList,
   FileBarChart,
   HardHat,
   LayoutDashboard,
@@ -63,6 +64,12 @@ const navigation: NavGroup[] = [
         label: "Checklists",
         icon: <ClipboardCheck size={18} />,
         href: "/checklists",
+        allowedRoles: managementRoles,
+      },
+      {
+        label: "Auditoria de checklists",
+        icon: <ClipboardList size={18} />,
+        href: "/audits",
         allowedRoles: managementRoles,
       },
       {

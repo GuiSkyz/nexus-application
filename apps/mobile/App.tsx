@@ -49,7 +49,7 @@ const tabs: Array<{
 }> = [
   { name: "HOME", label: "Início", Icon: Home },
   { name: "MY_TASKS", label: "Tarefas", Icon: ClipboardList },
-  { name: "ACTION_PLANS", label: "Planos", Icon: ShieldAlert },
+  { name: "ACTION_PLANS", label: "NCs", Icon: ShieldAlert },
   { name: "ALL_CHECKLISTS", label: "Checklists", Icon: ListChecks },
   { name: "HISTORY", label: "Histórico", Icon: History },
   { name: "PROFILE", label: "Perfil", Icon: User },

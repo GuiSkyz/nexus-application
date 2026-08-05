@@ -12,6 +12,7 @@ import { AuditInspectionDetail } from "@/types/audit";
 export default function AuditDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [audit, setAudit] = useState<AuditInspectionDetail | null>(null);
+  const [questionId, setQuestionId] = useState("");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("MEDIA");
   const [feedback, setFeedback] = useState("");
@@ -81,13 +82,18 @@ export default function AuditDetailPage() {
             </section>
             <section className="rounded-xl border border-warning-soft bg-warning-soft p-4">
               <h2 className="font-bold text-warning-foreground"><AlertTriangle className="inline h-4 w-4" /> Abrir não conformidade</h2>
+              <label className="mt-3 block text-xs font-bold text-warning-foreground" htmlFor="audit-question">Questão do checklist</label>
+              <select id="audit-question" value={questionId} onChange={(e) => setQuestionId(e.target.value)} className="mt-1 h-10 w-full rounded border px-2">
+                <option value="">Selecione a questão com divergência</option>
+                {audit.answers.map((answer) => <option key={answer.questionId} value={answer.questionId}>{answer.questionText}</option>)}
+              </select>
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descreva a divergência" className="mt-3 min-h-24 w-full rounded border p-2" />
               <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="mt-2 h-10 w-full rounded border px-2">
                 <option value="MEDIA">Média</option>
                 <option value="ALTA">Alta</option>
                 <option value="CRITICA">Crítica</option>
               </select>
-              <button disabled={!description.trim()} onClick={() => void ApiClient.createAuditNonconformity(id, description, severity).then((result) => setFeedback(`NC ${result.code} aberta.`))} className="mt-3 h-10 w-full rounded bg-warning-foreground text-xs font-bold text-white disabled:opacity-50">
+              <button disabled={!questionId || !description.trim()} onClick={() => void ApiClient.createAuditNonconformity(id, questionId, description, severity).then((result) => setFeedback(`NC ${result.code} aberta.`))} className="mt-3 h-10 w-full rounded bg-warning-foreground text-xs font-bold text-white disabled:opacity-50">
                 Abrir NC
               </button>
             </section>

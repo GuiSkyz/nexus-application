@@ -31,7 +31,7 @@ export function ActionPlansScreen() {
     try {
       setError(undefined);
       const records = await ApiService.getMyIncidents();
-      setIncidents(records.filter((incident) => incident.actionPlan));
+      setIncidents(records);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível carregar os planos.");
     } finally {
@@ -51,8 +51,8 @@ export function ActionPlansScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Planos de ação</Text>
-        <Text style={styles.subtitle}>Acompanhe as correções vinculadas às suas não conformidades.</Text>
+        <Text style={styles.title}>Não conformidades</Text>
+        <Text style={styles.subtitle}>Acompanhe as divergências registradas e as respectivas correções.</Text>
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
@@ -60,16 +60,15 @@ export function ActionPlansScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={incidents.length ? styles.list : styles.emptyList}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} colors={[colors.blue[600]]} />}
-        ListEmptyComponent={<View style={styles.empty}><ClipboardCheck size={42} color={colors.success.DEFAULT} /><Text style={styles.emptyTitle}>Nenhum plano pendente</Text><Text style={styles.emptyText}>Quando uma não conformidade sua receber um plano de ação, ela aparecerá aqui.</Text></View>}
+        ListEmptyComponent={<View style={styles.empty}><ClipboardCheck size={42} color={colors.success.DEFAULT} /><Text style={styles.emptyTitle}>Nenhuma não conformidade</Text><Text style={styles.emptyText}>As não conformidades vinculadas a você aparecerão aqui, mesmo antes de receberem um plano de ação.</Text></View>}
         renderItem={({ item }) => {
-          const plan = item.actionPlan!;
-          const resolved = item.status === "RESOLVIDA" || Boolean(plan.resolvedAt);
+          const plan = item.actionPlan;
+          const resolved = item.status === "RESOLVIDA" || Boolean(plan?.resolvedAt);
+          const statusLabel = resolved ? "Concluído" : plan ? "Em andamento" : "Aberta";
           return <View style={styles.card}>
-            <View style={styles.cardTop}><Text style={styles.code}>{item.id}</Text><Text style={[styles.status, resolved ? styles.statusResolved : styles.statusOpen]}>{resolved ? "Concluído" : "Em andamento"}</Text></View>
+            <View style={styles.cardTop}><Text style={styles.code}>{item.id}</Text><Text style={[styles.status, resolved ? styles.statusResolved : styles.statusOpen]}>{statusLabel}</Text></View>
             <Text style={styles.question}>{item.questionText}</Text>
-            <Text style={styles.planLabel}>Ação corretiva</Text>
-            <Text style={styles.plan}>{plan.description}</Text>
-            <View style={styles.details}><Text style={styles.detail}>Responsável: {plan.assignedTo}</Text><View style={styles.deadline}><Clock3 size={14} color={colors.text.secondary} /><Text style={styles.detail}>Prazo: {new Date(plan.dueDate).toLocaleDateString("pt-BR")}</Text></View></View>
+            {plan ? <><Text style={styles.planLabel}>Ação corretiva</Text><Text style={styles.plan}>{plan.description}</Text><View style={styles.details}><Text style={styles.detail}>Responsável: {plan.assignedTo}</Text><View style={styles.deadline}><Clock3 size={14} color={colors.text.secondary} /><Text style={styles.detail}>Prazo: {new Date(plan.dueDate).toLocaleDateString("pt-BR")}</Text></View></View></> : <Text style={styles.waiting}>Aguardando definição do plano de ação pela supervisão.</Text>}
             <Text style={styles.severity}>Severidade: {severityLabels[item.severity]}</Text>
           </View>;
         }}
@@ -99,6 +98,7 @@ const styles = StyleSheet.create({
   question: { color: colors.text.primary, fontSize: 15, fontWeight: "800", lineHeight: 21 },
   planLabel: { color: colors.text.secondary, fontSize: 11, fontWeight: "800", marginTop: 14 },
   plan: { color: colors.text.primary, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  waiting: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginTop: 14 },
   details: { borderTopWidth: 1, borderTopColor: colors.border.default, gap: 6, marginTop: 14, paddingTop: 12 },
   detail: { color: colors.text.secondary, fontSize: 12 },
   deadline: { flexDirection: "row", alignItems: "center", gap: 5 },

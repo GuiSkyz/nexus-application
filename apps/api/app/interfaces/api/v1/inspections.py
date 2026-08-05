@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,7 +27,6 @@ from app.application.services.inspection_report import (
 from app.core.auth import get_current_user
 from app.infrastructure.database.models.apr_model import AprAssessmentModel
 from app.infrastructure.database.models.checklist_model import (
-    ChecklistQuestionModel,
     ChecklistSectionModel,
     ChecklistTechnicianAssignmentModel,
     ChecklistTemplateModel,
@@ -219,6 +218,43 @@ def _ensure_audit_access(user: UserModel) -> None:
         raise HTTPException(status_code=403, detail="Acesso de auditoria restrito à gestão.")
 
 
+async def _question_texts_for_inspection(
+    session: AsyncSession, inspection: InspectionModel
+) -> dict[str, str]:
+    """Resolve a versão do checklist usada na vistoria, inclusive quando o mobile envia a família."""
+    result = await session.execute(
+        select(ChecklistTemplateModel)
+        .options(
+            selectinload(ChecklistTemplateModel.sections).selectinload(
+                ChecklistSectionModel.questions
+            )
+        )
+        .where(
+            or_(
+                ChecklistTemplateModel.id == inspection.template_id,
+                ChecklistTemplateModel.template_family_id == inspection.template_id,
+            )
+        )
+    )
+    templates = result.scalars().unique().all()
+    template = next(
+        (
+            item
+            for item in templates
+            if item.id == inspection.template_id
+            or str(item.version) == str(inspection.template_version)
+        ),
+        None,
+    )
+    if not template and templates:
+        template = templates[0]
+    return {
+        question.id: question.question_text
+        for section in (template.sections if template else [])
+        for question in section.questions
+    }
+
+
 @router.get("/audit", response_model=list[AuditInspectionSummary])
 async def list_audit_inspections(
     user: UserModel = Depends(get_current_user),
@@ -260,21 +296,7 @@ async def get_audit_inspection(
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist preenchido não encontrado.")
-    template_result = await session.execute(
-        select(ChecklistTemplateModel)
-        .options(
-            selectinload(ChecklistTemplateModel.sections).selectinload(
-                ChecklistSectionModel.questions
-            )
-        )
-        .where(ChecklistTemplateModel.id == item.template_id)
-    )
-    template = template_result.scalar_one_or_none()
-    question_texts = {
-        question.id: question.question_text
-        for section in (template.sections if template else [])
-        for question in section.questions
-    }
+    question_texts = await _question_texts_for_inspection(session, item)
     return AuditInspectionDetail(
         id=item.id,
         title=item.title,
@@ -343,15 +365,12 @@ async def create_audit_nonconformity(
             status_code=422,
             detail="A questão selecionada não pertence a este checklist.",
         )
-    question_result = await session.execute(
-        select(ChecklistQuestionModel.question_text)
-        .join(ChecklistSectionModel)
-        .where(
-            ChecklistSectionModel.template_id == inspection.template_id,
-            ChecklistQuestionModel.id == payload.questionId,
+    question_text = (
+        (await _question_texts_for_inspection(session, inspection)).get(
+            payload.questionId
         )
+        or payload.questionId
     )
-    question_text = question_result.scalar_one_or_none() or payload.questionId
     incident = IncidentModel(
         code=f"NC-{datetime.now(UTC).year}-{uuid4().hex[:8].upper()}",
         inspection_id=inspection.id,
@@ -386,21 +405,7 @@ async def export_audit_pdf(
     inspection = result.scalar_one_or_none()
     if not inspection:
         raise HTTPException(status_code=404, detail="Checklist preenchido não encontrado.")
-    template_result = await session.execute(
-        select(ChecklistTemplateModel)
-        .options(
-            selectinload(ChecklistTemplateModel.sections).selectinload(
-                ChecklistSectionModel.questions
-            )
-        )
-        .where(ChecklistTemplateModel.id == inspection.template_id)
-    )
-    template = template_result.scalar_one_or_none()
-    question_texts = {
-        question.id: question.question_text
-        for section in (template.sections if template else [])
-        for question in section.questions
-    }
+    question_texts = await _question_texts_for_inspection(session, inspection)
     content = generate_inspection_report(InspectionReportData(
         inspection_id=inspection.id,
         title=inspection.title,

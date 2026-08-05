@@ -209,8 +209,8 @@ export class ApiClient {
     return request<AuditInspectionDetail>(`/inspections/audit/${id}`);
   }
 
-  static createAuditNonconformity(id: string, description: string, severity: string) {
-    return request<{ code: string }>(`/inspections/audit/${id}/nonconformity`, { method: "POST", body: JSON.stringify({ description, severity }) });
+  static createAuditNonconformity(id: string, questionId: string, description: string, severity: string) {
+    return request<{ code: string }>(`/inspections/audit/${id}/nonconformity`, { method: "POST", body: JSON.stringify({ questionId, description, severity }) });
   }
 
   static exportAuditPdf(id: string) {

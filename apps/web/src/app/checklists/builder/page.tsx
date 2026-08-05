@@ -30,6 +30,11 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
+const categoryLabel: Record<string, string> = {
+  INSTALACAO_MANUTENCAO: "Instalação & Manutenção",
+  INFRAESTRUTURA: "Infraestrutura",
+};
+
 function BuilderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,7 +46,7 @@ function BuilderContent() {
     id: "",
     templateId: "",
     title: "",
-    category: "Frota & Veículos",
+    category: "INSTALACAO_MANUTENCAO",
     description: "",
     status: "draft",
     version: 1,
@@ -50,6 +55,8 @@ function BuilderContent() {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     usageCount: 0,
+    assignedTechnicianCount: 0,
+    assignedTechnicianIds: [],
     sections: [
       {
         id: `sec-${Date.now()}`,
@@ -302,7 +309,7 @@ function BuilderContent() {
         {isPreviewMode ? (
           <div className="max-w-2xl mx-auto bg-white p-6 rounded-xl border shadow-lg space-y-6" style={{ borderColor: "var(--border-default)" }}>
             <div className="border-b pb-4">
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">{template.category}</span>
+              <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">{categoryLabel[template.category]}</span>
               <h3 className="text-xl font-bold text-slate-900 mt-1">{template.title || "Título do Checklist"}</h3>
               <p className="text-xs text-slate-500 mt-1">{template.description || "Sem descrição."}</p>
             </div>
@@ -385,10 +392,8 @@ function BuilderContent() {
                     className="w-full p-2.5 border rounded-md text-xs outline-none focus:border-blue-600"
                     style={{ borderColor: "var(--border-default)" }}
                   >
-                    <option value="Frota & Veículos">Frota & Veículos</option>
-                    <option value="Segurança & NR">Segurança & NR</option>
-                    <option value="Telecom & Redes">Telecom & Redes</option>
-                    <option value="Infraestrutura">Infraestrutura</option>
+                    <option value="INSTALACAO_MANUTENCAO">Instalação & Manutenção</option>
+                    <option value="INFRAESTRUTURA">Infraestrutura</option>
                   </select>
                 </div>
               </div>

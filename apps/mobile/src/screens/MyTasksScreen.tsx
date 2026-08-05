@@ -14,6 +14,9 @@ import { ShieldAlert } from "@tamagui/lucide-icons-2/icons/ShieldAlert";
 import { colors, radius, shadow, spacing } from "../theme/tokens";
 import { ContextualChecklist, MobileVehicle } from "../types";
 
+const categoryLabel = (category: string) =>
+  category === "INSTALACAO_MANUTENCAO" ? "Instalação & Manutenção" : "Infraestrutura";
+
 interface MyTasksScreenProps {
   checklists: ContextualChecklist[];
   vehicles: MobileVehicle[];
@@ -80,7 +83,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({
                 </View>
                 <View style={styles.copy}>
                   <View style={styles.typeRow}>
-                    <Text style={styles.type}>{item.category}</Text>
+                    <Text style={styles.type}>{categoryLabel(item.category)}</Text>
                     {item.isRequired && (
                       <View style={styles.requiredBadge}>
                         <Text style={styles.requiredText}>OBRIGATÓRIO</Text>
@@ -89,7 +92,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({
                   </View>
                   <Text style={styles.taskTitle}>{item.title}</Text>
                   <Text style={styles.meta}>
-                    {completedToday ? "Concluído hoje · disponível amanhã" : `${item.questions.length} itens · ${item.estimatedMinutes} min`}
+                    {completedToday ? "Concluído no período atual" : `${item.questions.length} itens · ${item.frequency === "WEEKLY" ? "Semanal" : item.frequency === "ON_DEMAND" ? "Sob demanda" : "Diário"} · ${item.estimatedMinutes} min`}
                   </Text>
                 </View>
                 {completedToday ? <View style={styles.completedBadge}><Text style={styles.completedText}>CONCLUÍDO</Text></View> : <ChevronRight size={20} color={colors.text.secondary} />}

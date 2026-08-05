@@ -33,6 +33,7 @@ const emptyUser: Partial<ManagedUserPayload> = {
   role: "TECNICO",
   temporaryPassword: "",
   isActive: true,
+  operationalCategory: "INSTALACAO_MANUTENCAO",
 };
 
 export default function UsersPage() {
@@ -229,6 +230,12 @@ export default function UsersPage() {
                   {availableRoles.map((role) => <option key={role} value={role}>{roleLabels[role]}</option>)}
                 </select>
               </Field>
+              {editing.role === "TECNICO" && <Field label="Categoria operacional">
+                <select value={editing.operationalCategory || "INSTALACAO_MANUTENCAO"} onChange={(event) => setEditing({ ...editing, operationalCategory: event.target.value as ManagedUser["operationalCategory"] })}>
+                  <option value="INSTALACAO_MANUTENCAO">Instalação & Manutenção</option>
+                  <option value="INFRAESTRUTURA">Infraestrutura</option>
+                </select>
+              </Field>}
               <Field label={editing.id ? "Nova senha (opcional)" : "Senha temporária"}>
                 <input required={!editing.id} minLength={10} type="password" value={editing.temporaryPassword || ""} onChange={(event) => setEditing({ ...editing, temporaryPassword: event.target.value || undefined })} />
               </Field>

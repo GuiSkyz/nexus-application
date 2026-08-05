@@ -6,6 +6,7 @@ export interface Technician {
   phone?: string;
   teamName?: string;
   specialty?: string;
+  operationalCategory: "INSTALACAO_MANUTENCAO" | "INFRAESTRUTURA";
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

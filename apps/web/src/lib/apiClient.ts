@@ -212,6 +212,17 @@ export class ApiClient {
     return request<ChecklistTemplate>(`/checklists/${id}/publish`, { method: "POST" });
   }
 
+  static assignChecklistToTechnicians(
+    id: string,
+    technicianIds: string[],
+    frequency: "DAILY" | "WEEKLY" | "ON_DEMAND",
+  ) {
+    return request<ChecklistTemplate>(`/checklists/${id}/assign-technicians`, {
+      method: "POST",
+      body: JSON.stringify({ technicianIds, frequency }),
+    });
+  }
+
   static archiveChecklist(id: string) {
     return request<ChecklistTemplate>(`/checklists/${id}/archive`, { method: "POST" });
   }

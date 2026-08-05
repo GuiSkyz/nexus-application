@@ -115,7 +115,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {requiredChecklist && (
           <>
             <Text style={styles.meta}>
-              {isChecklistCompletedToday ? "Checklist concluído hoje. Nova liberação amanhã." : `${requiredChecklist.questions.length} itens · aproximadamente ${requiredChecklist.estimatedMinutes} minutos`}
+              {isChecklistCompletedToday ? "Checklist concluído no período atual." : `${requiredChecklist.questions.length} itens · ${requiredChecklist.frequency === "WEEKLY" ? "semanal" : requiredChecklist.frequency === "ON_DEMAND" ? "sob demanda" : "diário"} · aproximadamente ${requiredChecklist.estimatedMinutes} minutos`}
             </Text>
             <TouchableOpacity
               style={[styles.primaryButton, isChecklistCompletedToday && styles.primaryButtonCompleted]}
@@ -123,7 +123,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               disabled={isChecklistCompletedToday}
               accessibilityRole="button"
               accessibilityState={{ disabled: isChecklistCompletedToday }}
-              accessibilityLabel={isChecklistCompletedToday ? `${requiredChecklist.title}, concluído hoje` : `Iniciar ${requiredChecklist.title}`}
+              accessibilityLabel={isChecklistCompletedToday ? `${requiredChecklist.title}, concluído no período atual` : `Iniciar ${requiredChecklist.title}`}
             >
               <Text style={styles.primaryButtonText}>{isChecklistCompletedToday ? "Concluído hoje" : "Iniciar checklist"}</Text>
               {!isChecklistCompletedToday && <ArrowRight size={18} color={colors.text.inverse} />}

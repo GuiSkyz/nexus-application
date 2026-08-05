@@ -27,6 +27,7 @@ from app.core.auth import get_current_user
 from app.infrastructure.database.models.apr_model import AprAssessmentModel
 from app.infrastructure.database.models.checklist_model import (
     ChecklistSectionModel,
+    ChecklistTechnicianAssignmentModel,
     ChecklistTemplateModel,
 )
 from app.infrastructure.database.models.incident_model import IncidentModel
@@ -46,11 +47,16 @@ router = APIRouter(prefix="/inspections", tags=["Inspeções & Sincronização"]
 FIELD_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 
-def _today_bounds() -> tuple[datetime, datetime]:
-    """Return the current field-day interval in UTC for consistent daily locks."""
+def _execution_period(frequency: str) -> tuple[datetime, datetime] | None:
+    if frequency == "ON_DEMAND":
+        return None
     local_now = datetime.now(FIELD_TIMEZONE)
     start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(days=1)
+    if frequency == "WEEKLY":
+        start -= timedelta(days=start.weekday())
+        end = start + timedelta(days=7)
+    else:
+        end = start + timedelta(days=1)
     return start.astimezone(UTC), end.astimezone(UTC)
 
 
@@ -178,11 +184,27 @@ async def get_mobile_context(
         .order_by(VehicleModel.plate)
     )
     vehicles = vehicle_result.scalars().all()
-    assigned_template_ids = {
+    vehicle_template_ids = {
         vehicle.assigned_checklist_template_id
         for vehicle in vehicles
         if vehicle.assigned_checklist_template_id
     }
+    assigned_template_ids = set(vehicle_template_ids)
+    technician_assignments = (
+        await session.execute(
+            select(ChecklistTechnicianAssignmentModel).where(
+                ChecklistTechnicianAssignmentModel.technician_id == user.id
+            )
+        )
+    ).scalars().all()
+    technician_template_ids = {
+        assignment.template_id for assignment in technician_assignments
+    }
+    technician_frequencies = {
+        assignment.template_id: assignment.frequency
+        for assignment in technician_assignments
+    }
+    assigned_template_ids.update(technician_template_ids)
 
     checklist_result = await session.execute(
         select(ChecklistTemplateModel)
@@ -192,6 +214,7 @@ async def get_mobile_context(
             )
         )
         .where(ChecklistTemplateModel.status == "published")
+        .where(ChecklistTemplateModel.id.in_(assigned_template_ids))
         .order_by(ChecklistTemplateModel.updated_at.desc())
     )
     checklists = checklist_result.scalars().unique().all()
@@ -209,13 +232,28 @@ async def get_mobile_context(
         .limit(50)
     )
     inspections = inspection_result.scalars().all()
-    today_start, tomorrow_start = _today_bounds()
-    completed_template_ids_today = {
-        inspection.template_id
-        for inspection in inspections
-        if inspection.status == "COMPLETED"
-        and inspection.completed_at is not None
-        and today_start <= inspection.completed_at < tomorrow_start
+    def completion_in_current_period(template_id: str, frequency: str) -> str | None:
+        period = _execution_period(frequency)
+        if period is None:
+            return None
+        period_start, period_end = period
+        return next(
+            (
+                inspection.completed_at.isoformat()
+                for inspection in inspections
+                if inspection.template_id == template_id
+                and inspection.status == "COMPLETED"
+                and inspection.completed_at is not None
+                and period_start <= inspection.completed_at < period_end
+            ),
+            None,
+        )
+
+    completion_at_by_template_id = {
+        checklist.id: completion_in_current_period(
+            checklist.id, technician_frequencies.get(checklist.id, "DAILY")
+        )
+        for checklist in checklists
     }
 
     apr_result = await session.execute(
@@ -266,27 +304,18 @@ async def get_mobile_context(
                     or "RISCO" in checklist.title.upper()
                     else (
                         "VEHICLE"
-                        if checklist.id in assigned_template_ids
+                        if checklist.id in vehicle_template_ids
                         else "INDIVIDUAL"
                     )
                 ),
                 "isRequired": checklist.id in assigned_template_ids,
+                "frequency": technician_frequencies.get(checklist.id, "DAILY"),
                 "state": (
                     "COMPLETED"
-                    if checklist.id in completed_template_ids_today
+                    if completion_at_by_template_id[checklist.id] is not None
                     else "PENDING"
                 ),
-                "completedAt": next(
-                    (
-                        inspection.completed_at.isoformat()
-                        for inspection in inspections
-                        if inspection.template_id == checklist.id
-                        and inspection.status == "COMPLETED"
-                        and inspection.completed_at is not None
-                        and today_start <= inspection.completed_at < tomorrow_start
-                    ),
-                    None,
-                ),
+                "completedAt": completion_at_by_template_id[checklist.id],
                 "estimatedMinutes": max(
                     5,
                     sum(
@@ -373,20 +402,28 @@ async def _persist_inspection(
                 detail="O veículo informado não está atribuído ao técnico autenticado.",
             )
 
-    today_start, tomorrow_start = _today_bounds()
-    completed_today = await session.scalar(
-        select(InspectionModel.id).where(
-            InspectionModel.technician_id == user.id,
-            InspectionModel.template_id == template_id,
-            InspectionModel.status == "COMPLETED",
-            InspectionModel.completed_at >= today_start,
-            InspectionModel.completed_at < tomorrow_start,
+    assignment = await session.scalar(
+        select(ChecklistTechnicianAssignmentModel).where(
+            ChecklistTechnicianAssignmentModel.template_id == template_id,
+            ChecklistTechnicianAssignmentModel.technician_id == user.id,
         )
     )
-    if completed_today:
+    period = _execution_period(assignment.frequency if assignment else "DAILY")
+    completed_in_period = None
+    if period is not None:
+        completed_in_period = await session.scalar(
+            select(InspectionModel.id).where(
+                InspectionModel.technician_id == user.id,
+                InspectionModel.template_id == template_id,
+                InspectionModel.status == "COMPLETED",
+                InspectionModel.completed_at >= period[0],
+                InspectionModel.completed_at < period[1],
+            )
+        )
+    if completed_in_period:
         raise HTTPException(
             status_code=409,
-            detail="Este checklist já foi concluído hoje e será liberado novamente amanhã.",
+            detail="Este checklist já foi concluído no período atual.",
         )
 
     inspection = InspectionModel(

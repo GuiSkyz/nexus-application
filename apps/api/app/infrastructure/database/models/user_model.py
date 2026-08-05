@@ -33,6 +33,9 @@ class UserModel(Base):
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     team_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     specialty: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    operational_category: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="INSTALACAO_MANUTENCAO"
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False, comment="Flag de conta ativa/suspensa"
     )

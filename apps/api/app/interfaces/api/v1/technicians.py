@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.operational_categories import OPERATIONAL_CATEGORIES
 from app.core.security import get_password_hash
 from app.infrastructure.database.models.user_model import UserModel
 from app.infrastructure.database.session import get_db
@@ -21,6 +22,7 @@ class TechnicianBasePayload(BaseModel):
     phone: str | None = None
     teamName: str | None = None
     specialty: str | None = None
+    operationalCategory: str = "INSTALACAO_MANUTENCAO"
     isActive: bool = True
 
 
@@ -43,6 +45,7 @@ class TechnicianResponse(BaseModel):
     isActive: bool
     createdAt: str
     updatedAt: str
+    operationalCategory: str
 
 
 def _response(user: UserModel) -> TechnicianResponse:
@@ -57,6 +60,7 @@ def _response(user: UserModel) -> TechnicianResponse:
         isActive=user.is_active,
         createdAt=user.created_at.isoformat(),
         updatedAt=user.updated_at.isoformat(),
+        operationalCategory=user.operational_category,
     )
 
 
@@ -78,6 +82,8 @@ async def list_technicians(
 async def create_technician(
     payload: TechnicianCreatePayload, session: AsyncSession = Depends(get_db)
 ) -> TechnicianResponse:
+    if payload.operationalCategory not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     duplicate = await session.scalar(
         select(UserModel).where(
             or_(
@@ -97,6 +103,7 @@ async def create_technician(
         phone=payload.phone,
         team_name=payload.teamName,
         specialty=payload.specialty,
+        operational_category=payload.operationalCategory,
         role="TECNICO",
         is_active=payload.isActive,
         hashed_password=get_password_hash(payload.temporaryPassword),
@@ -129,12 +136,15 @@ async def update_technician(
         raise HTTPException(
             status_code=409, detail="E-mail ou matrícula já está em uso."
         )
+    if payload.operationalCategory not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     user.full_name = payload.fullName.strip()
     user.email = payload.email.lower()
     user.employee_code = payload.employeeCode.upper()
     user.phone = payload.phone
     user.team_name = payload.teamName
     user.specialty = payload.specialty
+    user.operational_category = payload.operationalCategory
     user.is_active = payload.isActive
     if payload.temporaryPassword:
         user.hashed_password = get_password_hash(payload.temporaryPassword)

@@ -2,6 +2,7 @@ from app.infrastructure.database.models.apr_model import AprAssessmentModel, Apr
 from app.infrastructure.database.models.checklist_model import (
     ChecklistQuestionModel,
     ChecklistSectionModel,
+    ChecklistTechnicianAssignmentModel,
     ChecklistTemplateModel,
 )
 from app.infrastructure.database.models.incident_model import ActionPlanModel, IncidentModel
@@ -20,6 +21,7 @@ __all__ = [
     "UserModel",
     "VehicleModel",
     "ChecklistTemplateModel",
+    "ChecklistTechnicianAssignmentModel",
     "ChecklistSectionModel",
     "ChecklistQuestionModel",
     "InspectionModel",

@@ -24,6 +24,11 @@ import {
 } from "lucide-react";
 import { KpiCard } from "@/components/nexus/kpi-card";
 
+const categoryLabel: Record<VehicleCategory, string> = {
+  INSTALACAO_MANUTENCAO: "Instalação & Manutenção",
+  INFRAESTRUTURA: "Infraestrutura",
+};
+
 export default function VehiclesPage() {
   const { permissions } = useRole();
   const canManageVehicles = permissions.canCreate || permissions.canDelete;
@@ -269,10 +274,8 @@ export default function VehiclesPage() {
                 }}
               >
                 <option value="all">Todas as Categorias</option>
-                <option value="INSTALACAO">Instalação & Drop</option>
-                <option value="MANUTENCAO_FIBRA">Manutenção de Fibra</option>
-                <option value="INFRAESTRUTURA">Infraestrutura & Torres</option>
-                <option value="SUPERVISAO">Supervisão Operacional</option>
+                <option value="INSTALACAO_MANUTENCAO">Instalação & Manutenção</option>
+                <option value="INFRAESTRUTURA">Infraestrutura</option>
               </select>
             </div>
 
@@ -293,7 +296,7 @@ export default function VehiclesPage() {
                 <button
                   onClick={() => {
                     setEditingVehicle({
-                      category: "INSTALACAO",
+                      category: "INSTALACAO_MANUTENCAO",
                       status: "DISPONIVEL",
                       year: new Date().getFullYear(),
                     });
@@ -358,7 +361,7 @@ export default function VehiclesPage() {
                         <p className="text-[10px] text-slate-400 font-mono">{vehicle.currentKm.toLocaleString("pt-BR")} KM</p>
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-slate-700">
-                        {vehicle.category}
+                        {categoryLabel[vehicle.category]}
                       </td>
                       <td className="py-3.5 px-4">
                         {vehicle.assignedTechnicianName ? (
@@ -485,14 +488,18 @@ export default function VehiclesPage() {
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Categoria Operacional</label>
                     <select
-                      value={editingVehicle.category || "INSTALACAO"}
-                      onChange={(e) => setEditingVehicle({ ...editingVehicle, category: e.target.value as VehicleCategory })}
+                      value={editingVehicle.category || "INSTALACAO_MANUTENCAO"}
+                      onChange={(e) => setEditingVehicle({
+                        ...editingVehicle,
+                        category: e.target.value as VehicleCategory,
+                        assignedTechnicianId: undefined,
+                        assignedChecklistTemplateId: undefined,
+                        assignedChecklistTitle: undefined,
+                      })}
                       className="w-full p-2 border rounded outline-none"
                     >
-                      <option value="INSTALACAO">Instalação & Drop</option>
-                      <option value="MANUTENCAO_FIBRA">Manutenção de Fibra</option>
-                      <option value="INFRAESTRUTURA">Infraestrutura & Torres</option>
-                      <option value="SUPERVISAO">Supervisão Operacional</option>
+                      <option value="INSTALACAO_MANUTENCAO">Instalação & Manutenção</option>
+                      <option value="INFRAESTRUTURA">Infraestrutura</option>
                     </select>
                   </div>
                   <div>
@@ -508,7 +515,7 @@ export default function VehiclesPage() {
                       className="w-full p-2 border rounded outline-none"
                     >
                       <option value="">Sem técnico responsável</option>
-                      {technicians.map((technician) => (
+                      {technicians.filter((technician) => technician.operationalCategory === editingVehicle.category).map((technician) => (
                         <option key={technician.id} value={technician.id}>
                           {technician.fullName} · {technician.teamName || "Sem equipe"}
                         </option>
@@ -533,9 +540,9 @@ export default function VehiclesPage() {
                     className="w-full p-2 border rounded outline-none"
                   >
                     <option value="">Selecione um checklist publicado...</option>
-                    {templates.map((t) => (
+                    {templates.filter((template) => template.category === editingVehicle.category).map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.title} (v{t.version}.0) - [{t.category}]
+                        {t.title} (v{t.version}.0)
                       </option>
                     ))}
                   </select>
@@ -591,7 +598,7 @@ export default function VehiclesPage() {
                   >
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.title} (v{t.version}.0) — Categoria: {t.category}
+                        {t.title} (v{t.version}.0) — Categoria: {categoryLabel[t.category as VehicleCategory]}
                       </option>
                     ))}
                   </select>

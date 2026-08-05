@@ -20,7 +20,7 @@ class VehicleModel(Base):
         Integer, nullable=False, default=0, comment="Quilometragem atual do odômetro"
     )
     category: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="INSTALACAO", comment="Categoria: INSTALACAO, MANUTENCAO_FIBRA, INFRAESTRUTURA, SUPERVISAO"
+        String(50), nullable=False, default="INSTALACAO_MANUTENCAO", comment="Categoria operacional"
     )
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="DISPONIVEL", comment="Status: DISPONIVEL, EM_VISTORIA, MANUTENCAO, INDISPONIVEL"

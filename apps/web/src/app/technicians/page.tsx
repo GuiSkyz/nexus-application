@@ -14,6 +14,7 @@ const empty: Partial<TechnicianPayload> = {
   phone: "",
   teamName: "",
   specialty: "",
+  operationalCategory: "INSTALACAO_MANUTENCAO",
   isActive: true,
 };
 
@@ -74,7 +75,7 @@ export default function TechniciansPage() {
             <article key={item.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_180px_180px_100px_auto] lg:items-center">
               <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-nexus-blue-50 text-nexus-blue-700"><HardHat className="h-5 w-5" /></span><div><h2 className="text-sm font-bold text-text-primary">{item.fullName}</h2><p className="text-xs text-text-secondary">{item.email}</p></div></div>
               <div className="text-xs"><p className="font-bold text-text-primary">{item.employeeCode || "Sem matrícula"}</p><p className="text-text-secondary">{item.phone || "Sem telefone"}</p></div>
-              <div className="text-xs"><p className="font-bold text-text-primary">{item.teamName || "Sem equipe"}</p><p className="text-text-secondary">{item.specialty || "Sem especialidade"}</p></div>
+              <div className="text-xs"><p className="font-bold text-text-primary">{item.teamName || "Sem equipe"}</p><p className="text-text-secondary">{item.operationalCategory === "INFRAESTRUTURA" ? "Infraestrutura" : "Instalação & Manutenção"}</p></div>
               <span className={`justify-self-start rounded px-2 py-1 text-[10px] font-bold ${item.isActive ? "bg-success-soft text-success-foreground" : "bg-surface-muted text-text-secondary"}`}>{item.isActive ? "Ativo" : "Inativo"}</span>
               <div className="flex justify-end gap-1"><button onClick={() => setEditing({ ...item })} className="rounded p-2 text-text-secondary hover:bg-surface-muted"><Edit className="h-4 w-4" /></button><button onClick={() => window.confirm("Excluir este técnico?") && void ApiClient.deleteTechnician(item.id).then(load)} className="rounded p-2 text-text-secondary hover:bg-danger-soft hover:text-danger-foreground"><Trash2 className="h-4 w-4" /></button></div>
             </article>
@@ -91,6 +92,7 @@ export default function TechniciansPage() {
           <Field label="Telefone"><input value={editing.phone || ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} /></Field>
           <Field label="Equipe"><input value={editing.teamName || ""} onChange={(e) => setEditing({ ...editing, teamName: e.target.value })} /></Field>
           <Field label="Especialidade"><input value={editing.specialty || ""} onChange={(e) => setEditing({ ...editing, specialty: e.target.value })} /></Field>
+          <Field label="Categoria operacional"><select value={editing.operationalCategory || "INSTALACAO_MANUTENCAO"} onChange={(e) => setEditing({ ...editing, operationalCategory: e.target.value as Technician["operationalCategory"] })}><option value="INSTALACAO_MANUTENCAO">Instalação & Manutenção</option><option value="INFRAESTRUTURA">Infraestrutura</option></select></Field>
           <Field label={editing.id ? "Nova senha (opcional)" : "Senha temporária"}><input required={!editing.id} type="password" minLength={10} value={editing.temporaryPassword || ""} onChange={(e) => setEditing({ ...editing, temporaryPassword: e.target.value || undefined })} /></Field>
           <label className="flex items-center gap-2 self-end pb-3 text-xs font-semibold text-text-primary"><input type="checkbox" checked={editing.isActive ?? true} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} /> Técnico ativo</label>
         </div>

@@ -12,6 +12,9 @@ import { ListChecks } from "@tamagui/lucide-icons-2/icons/ListChecks";
 import { colors, radius, shadow, spacing } from "../theme/tokens";
 import { ContextualChecklist } from "../types";
 
+const categoryLabel = (category: string) =>
+  category === "INSTALACAO_MANUTENCAO" ? "Instalação & Manutenção" : "Infraestrutura";
+
 interface AllChecklistsScreenProps {
   checklists: ContextualChecklist[];
   onOpenChecklist: (checklist: ContextualChecklist) => void;
@@ -91,7 +94,7 @@ export const AllChecklistsScreen: React.FC<AllChecklistsScreenProps> = ({
               accessibilityLabel={item.state === "COMPLETED" ? `${item.title}, concluído hoje` : `Abrir ${item.title}`}
             >
               <View style={styles.copy}>
-                <Text style={styles.category}>{item.category}</Text>
+                <Text style={styles.category}>{categoryLabel(item.category)}</Text>
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 <Text style={styles.meta}>
                   {item.state === "COMPLETED" ? "Concluído hoje · disponível amanhã" : `Versão ${item.templateVersion} · ${item.questions.length} itens`}

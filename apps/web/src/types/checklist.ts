@@ -60,6 +60,8 @@ export interface ChecklistTemplate {
   publishedAt?: string;
   archivedAt?: string;
   usageCount: number; // Número de inspeções que já utilizaram este template
+  assignedTechnicianCount: number;
+  assignedTechnicianIds: string[];
   sections: ChecklistSection[];
 }
 

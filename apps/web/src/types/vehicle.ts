@@ -1,8 +1,6 @@
 export type VehicleCategory =
-  | "INSTALACAO"
-  | "MANUTENCAO_FIBRA"
-  | "INFRAESTRUTURA"
-  | "SUPERVISAO";
+  | "INSTALACAO_MANUTENCAO"
+  | "INFRAESTRUTURA";
 
 export type VehicleStatus =
   | "DISPONIVEL"

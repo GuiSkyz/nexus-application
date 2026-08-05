@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.operational_categories import OPERATIONAL_CATEGORIES
 from app.core.security import get_password_hash
 from app.infrastructure.database.models.user_model import UserModel
 from app.infrastructure.database.session import get_db
@@ -34,6 +35,7 @@ class UserCreatePayload(BaseModel):
     role: UserRole
     temporaryPassword: str = Field(min_length=10, max_length=128)
     isActive: bool = True
+    operationalCategory: str = "INSTALACAO_MANUTENCAO"
 
 
 class UserUpdatePayload(BaseModel):
@@ -44,6 +46,7 @@ class UserUpdatePayload(BaseModel):
     role: UserRole
     temporaryPassword: str | None = Field(default=None, min_length=10, max_length=128)
     isActive: bool = True
+    operationalCategory: str = "INSTALACAO_MANUTENCAO"
 
 
 class UserResponse(BaseModel):
@@ -54,6 +57,7 @@ class UserResponse(BaseModel):
     isActive: bool
     createdAt: str
     updatedAt: str
+    operationalCategory: str
 
 
 def _ensure_manager(user: UserModel) -> None:
@@ -89,6 +93,7 @@ def _response(user: UserModel) -> UserResponse:
         isActive=user.is_active,
         createdAt=user.created_at.isoformat(),
         updatedAt=user.updated_at.isoformat(),
+        operationalCategory=user.operational_category,
     )
 
 
@@ -115,6 +120,8 @@ async def create_user(
 ) -> UserResponse:
     _ensure_manager(manager)
     _ensure_role_assignment(manager, payload.role)
+    if payload.role == "TECNICO" and payload.operationalCategory not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     email = payload.email.lower().strip()
     if await session.scalar(select(UserModel).where(UserModel.email == email)):
         raise HTTPException(status_code=409, detail="E-mail já está em uso.")
@@ -124,6 +131,7 @@ async def create_user(
         role=payload.role,
         hashed_password=get_password_hash(payload.temporaryPassword),
         is_active=payload.isActive,
+        operational_category=payload.operationalCategory,
     )
     session.add(user)
     await session.commit()
@@ -144,6 +152,8 @@ async def update_user(
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     _ensure_target_access(manager, user)
     _ensure_role_assignment(manager, payload.role)
+    if payload.role == "TECNICO" and payload.operationalCategory not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     email = payload.email.lower().strip()
     duplicate = await session.scalar(
         select(UserModel).where(UserModel.email == email, UserModel.id != user_id)
@@ -158,6 +168,7 @@ async def update_user(
     user.email = email
     user.role = payload.role
     user.is_active = payload.isActive
+    user.operational_category = payload.operationalCategory
     if payload.temporaryPassword:
         user.hashed_password = get_password_hash(payload.temporaryPassword)
     await session.commit()

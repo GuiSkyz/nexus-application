@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import String, Integer, Boolean, ForeignKey, Text, JSON
+from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.infrastructure.database.base import Base
 
@@ -37,6 +37,30 @@ class ChecklistTemplateModel(Base):
 
     sections: Mapped[List["ChecklistSectionModel"]] = relationship(
         "ChecklistSectionModel", back_populates="template", cascade="all, delete-orphan", order_by="ChecklistSectionModel.order"
+    )
+    technician_assignments: Mapped[List["ChecklistTechnicianAssignmentModel"]] = relationship(
+        "ChecklistTechnicianAssignmentModel", back_populates="template", cascade="all, delete-orphan"
+    )
+
+
+class ChecklistTechnicianAssignmentModel(Base):
+    __tablename__ = "checklist_technician_assignments"
+    __table_args__ = (
+        UniqueConstraint("template_id", "technician_id", name="uq_checklist_technician_assignment"),
+    )
+
+    template_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("checklist_templates.id", ondelete="CASCADE"), nullable=False
+    )
+    technician_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    frequency: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="DAILY"
+    )
+
+    template: Mapped["ChecklistTemplateModel"] = relationship(
+        "ChecklistTemplateModel", back_populates="technician_assignments"
     )
 
 

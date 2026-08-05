@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.operational_categories import OPERATIONAL_CATEGORIES
 from app.infrastructure.database.models.checklist_model import ChecklistTemplateModel
 from app.infrastructure.database.models.user_model import UserModel
 from app.infrastructure.database.models.vehicle_model import VehicleModel
@@ -22,7 +23,7 @@ class VehiclePayload(BaseModel):
     plate: str = Field(min_length=7, max_length=10)
     year: int = Field(default=2024, ge=1980, le=2100)
     currentKm: int = Field(default=0, ge=0)
-    category: str = "INSTALACAO"
+    category: str = "INSTALACAO_MANUTENCAO"
     status: str = "DISPONIVEL"
     assignedTechnicianId: str | None = None
     assignedChecklistTemplateId: str | None = None
@@ -38,6 +39,33 @@ class VehicleResponse(VehiclePayload):
 class BatchAssignRequest(BaseModel):
     templateId: str
     vehicleIds: list[str] = Field(min_length=1)
+
+
+async def _validate_assignments(
+    payload: VehiclePayload, session: AsyncSession
+) -> None:
+    if payload.category not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
+    if payload.assignedTechnicianId:
+        technician = await session.get(UserModel, payload.assignedTechnicianId)
+        if not technician or technician.role != "TECNICO":
+            raise HTTPException(status_code=422, detail="Técnico responsável inválido.")
+        if technician.operational_category != payload.category:
+            raise HTTPException(
+                status_code=422,
+                detail="O técnico e o veículo devem ter a mesma categoria.",
+            )
+    if payload.assignedChecklistTemplateId:
+        checklist = await session.get(
+            ChecklistTemplateModel, payload.assignedChecklistTemplateId
+        )
+        if not checklist or checklist.status != "published":
+            raise HTTPException(status_code=422, detail="Checklist publicado inválido.")
+        if checklist.category != payload.category:
+            raise HTTPException(
+                status_code=422,
+                detail="O checklist e o veículo devem ter a mesma categoria.",
+            )
 
 
 async def _response(
@@ -80,6 +108,7 @@ async def list_vehicles(
 async def create_vehicle(
     payload: VehiclePayload, session: AsyncSession = Depends(get_db)
 ) -> VehicleResponse:
+    await _validate_assignments(payload, session)
     normalized_plate = payload.plate.replace("-", "").upper()
     existing = await session.scalar(
         select(VehicleModel).where(VehicleModel.plate == normalized_plate)
@@ -111,6 +140,7 @@ async def update_vehicle(
     vehicle = await session.get(VehicleModel, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Veículo não encontrado.")
+    await _validate_assignments(payload, session)
     normalized_plate = payload.plate.replace("-", "").upper()
     duplicate = await session.scalar(
         select(VehicleModel).where(
@@ -156,6 +186,13 @@ async def batch_assign(
         select(VehicleModel).where(VehicleModel.id.in_(request.vehicleIds))
     )
     vehicles = result.scalars().all()
+    if len(vehicles) != len(set(request.vehicleIds)):
+        raise HTTPException(status_code=422, detail="Selecione veículos válidos.")
+    if any(vehicle.category != checklist.category for vehicle in vehicles):
+        raise HTTPException(
+            status_code=422,
+            detail="Selecione apenas veículos da categoria do checklist.",
+        )
     for vehicle in vehicles:
         vehicle.assigned_checklist_template_id = checklist.id
     await session.commit()

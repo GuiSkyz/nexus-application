@@ -8,11 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.operational_categories import OPERATIONAL_CATEGORIES
 from app.infrastructure.database.models.checklist_model import (
     ChecklistQuestionModel,
     ChecklistSectionModel,
+    ChecklistTechnicianAssignmentModel,
     ChecklistTemplateModel,
 )
+from app.infrastructure.database.models.user_model import UserModel
 from app.infrastructure.database.session import get_db
 
 router = APIRouter(prefix="/checklists", tags=["Templates de Checklist"])
@@ -72,7 +75,14 @@ class ChecklistResponse(BaseModel):
     publishedAt: str | None = None
     archivedAt: str | None = None
     usageCount: int
+    assignedTechnicianCount: int = 0
+    assignedTechnicianIds: list[str] = Field(default_factory=list)
     sections: list[SectionResponse]
+
+
+class BatchTechnicianAssignmentPayload(BaseModel):
+    technicianIds: list[str] = Field(min_length=1)
+    frequency: str = "DAILY"
 
 
 def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
@@ -92,6 +102,10 @@ def _response(template: ChecklistTemplateModel) -> ChecklistResponse:
         publishedAt=updated if template.status == "published" else None,
         archivedAt=updated if template.status == "archived" else None,
         usageCount=template.usage_count,
+        assignedTechnicianCount=len(template.technician_assignments),
+        assignedTechnicianIds=[
+            assignment.technician_id for assignment in template.technician_assignments
+        ],
         sections=[
             SectionResponse(
                 id=section.id,
@@ -146,7 +160,8 @@ def _statement():
     return select(ChecklistTemplateModel).options(
         selectinload(ChecklistTemplateModel.sections).selectinload(
             ChecklistSectionModel.questions
-        )
+        ),
+        selectinload(ChecklistTemplateModel.technician_assignments),
     )
 
 
@@ -179,6 +194,8 @@ async def get_checklist(
 async def create_checklist(
     payload: ChecklistPayload, session: AsyncSession = Depends(get_db)
 ) -> ChecklistResponse:
+    if payload.category not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     template = ChecklistTemplateModel(
         template_family_id=f"tpl-{uuid4().hex[:8]}",
         title=payload.title.strip(),
@@ -205,6 +222,8 @@ async def update_checklist(
     payload: ChecklistPayload,
     session: AsyncSession = Depends(get_db),
 ) -> ChecklistResponse:
+    if payload.category not in OPERATIONAL_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Categoria operacional inválida.")
     result = await session.execute(
         _statement().where(ChecklistTemplateModel.id == checklist_id)
     )
@@ -244,8 +263,70 @@ async def publish_checklist(
         )
     template.status = "published"
     await session.commit()
-    await session.refresh(template)
-    return _response(template)
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    return _response(result.scalar_one())
+
+
+@router.post(
+    "/{checklist_id}/assign-technicians", response_model=ChecklistResponse
+)
+async def assign_technicians(
+    checklist_id: str,
+    payload: BatchTechnicianAssignmentPayload,
+    session: AsyncSession = Depends(get_db),
+) -> ChecklistResponse:
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Checklist não encontrado.")
+    if template.status != "published":
+        raise HTTPException(
+            status_code=422,
+            detail="Publique o checklist antes de atribuí-lo aos técnicos.",
+        )
+    if payload.frequency not in {"DAILY", "WEEKLY", "ON_DEMAND"}:
+        raise HTTPException(status_code=422, detail="Periodicidade de checklist inválida.")
+
+    technician_result = await session.execute(
+        select(UserModel).where(
+            UserModel.id.in_(payload.technicianIds),
+            UserModel.role == "TECNICO",
+            UserModel.is_active.is_(True),
+        )
+    )
+    technicians = technician_result.scalars().all()
+    if len(technicians) != len(set(payload.technicianIds)):
+        raise HTTPException(
+            status_code=422, detail="Selecione apenas técnicos ativos válidos."
+        )
+    if any(technician.operational_category != template.category for technician in technicians):
+        raise HTTPException(
+            status_code=422,
+            detail="Selecione apenas técnicos da categoria do checklist.",
+        )
+
+    assigned_ids = {
+        assignment.technician_id for assignment in template.technician_assignments
+    }
+    for assignment in template.technician_assignments:
+        if assignment.technician_id in {technician.id for technician in technicians}:
+            assignment.frequency = payload.frequency
+    template.technician_assignments.extend(
+        ChecklistTechnicianAssignmentModel(
+            technician_id=technician.id, frequency=payload.frequency
+        )
+        for technician in technicians
+        if technician.id not in assigned_ids
+    )
+    await session.commit()
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    return _response(result.scalar_one())
 
 
 @router.post("/{checklist_id}/archive", response_model=ChecklistResponse)
@@ -260,8 +341,10 @@ async def archive_checklist(
         raise HTTPException(status_code=404, detail="Checklist não encontrado.")
     template.status = "archived"
     await session.commit()
-    await session.refresh(template)
-    return _response(template)
+    result = await session.execute(
+        _statement().where(ChecklistTemplateModel.id == checklist_id)
+    )
+    return _response(result.scalar_one())
 
 
 @router.post("/{checklist_id}/duplicate", response_model=ChecklistResponse)

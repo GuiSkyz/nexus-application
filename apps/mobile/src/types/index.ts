@@ -129,6 +129,7 @@ export interface ContextualChecklist {
   activityId?: string;
   teamId?: string;
   isRequired: boolean;
+  frequency?: "DAILY" | "WEEKLY" | "ON_DEMAND";
   state: ChecklistExecutionState;
   estimatedMinutes: number;
   completedAt?: string;
